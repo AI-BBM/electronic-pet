@@ -103,7 +103,22 @@ python tools/assets/upload_oss.py --src <布局根目录> --public-read
 # 验收：任一对象 HTTP 200 且 Content-Type: image/png，字节与本地一致
 curl -sI "https://laoli-storage.oss-cn-beijing.aliyuncs.com/pets/cat/1.png" | grep -iE "^HTTP|^content-type"
 
-# 冒烟（首次接通新桶时）：向 __smoke__/ 前缀上传 2 张小图 + 最小 manifest（--public-read），
+# 冒烟（首次接通新桶时）：向 __smoke__/ 前缀上传 2 张小图 + 最小 manifest，
 # curl 校验 200/image/png/字节一致后，用 oss2 delete_object 删除冒烟对象并确认 404/403。
-# 完整命令序列见仓库测试契约记录（Issue #10 测试先行子智能体产出 OPS1）。
+#
+# ⚠️ 目录形态（键 = 对象在 --src 内的相对路径）——要让键带 __smoke__/ 前缀，
+#    必须把 __smoke__/ 作为布局根下的子目录，而不是把名为 __smoke__ 的目录本身当 --src：
+#
+#   <布局根>/
+#     manifest.json          ← upload_oss 要求布局根必须有 manifest.json
+#     __smoke__/a.png        ← 键为 __smoke__/a.png
+#     __smoke__/b.png        ← 键为 __smoke__/b.png
+#
+#   误把 __smoke__ 目录本身当 --src 会让键（含 manifest.json）落到桶根。
+#
+# 冒烟命令序列：
+#   python tools/assets/upload_oss.py --src <布局根>            # 先验证私有链路（公网应 403）
+#   python tools/assets/upload_oss.py --src <布局根> --public-read
+#   curl -sI https://<bucket>.<endpoint>/__smoke__/a.png        # 期待 200 + image/png
+#   oss2 list_objects(prefix="__smoke__/") 逐个 delete_object 后复查 list 为空
 ```
