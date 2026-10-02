@@ -33,8 +33,8 @@ python tools/assets/process_assets.py --src <原始透明PNG目录> --dst <输�
 # 2. 剪影：文件或目录均可，输出保留原文件名
 python tools/assets/gen_silhouette.py --src <透明PNG或目录> --dst <剪影输出目录>
 
-# 3. 组装布局目录 pets/ eggs/ 后生成 manifest（种类元数据：{id: {name, rarity}}）
-python tools/assets/build_manifest.py --src <布局根目录> --meta <meta.json> --dst <布局根目录>/manifest.json
+# 3. 组装布局目录 pets/ eggs/ 后生成 manifest（--meta 用定稿 canonical 物种表 tools/assets/species.meta.json）
+python tools/assets/build_manifest.py --src <布局根目录> --meta tools/assets/species.meta.json --dst <布局根目录>/manifest.json
 
 # 4. 上传：OSS 凭据未开通前用 --mock 拷贝到本地 assets/oss-mock/（结构与线上一致）
 python tools/assets/upload_oss.py --src <布局根目录> --mock
@@ -53,3 +53,10 @@ python tools/assets/upload_oss.py --src <布局根目录> --mock
 URL 为以布局相对键结尾的字符串（可带 CDN/OSS 前缀）。完整定义见
 [manifest.schema.json](manifest.schema.json)。前端占位 manifest 允许 stages 只含部分
 阶段、silhouette/eggs 取值可空（`null`），与真实管线全量输出同构，可直接替换。
+
+## 物种锚点与测试
+
+- [species.meta.json](species.meta.json) 是 canonical 12 物种表（PM 定稿，
+  8 common / 3 rare / 1 epic），build_manifest 的 `--meta` 一律用它，不另造种类清单；
+- 测试套件：`python tools/assets/tests/run_tests.py`（22 条用例 T1–T22，
+  覆盖契约功能、边界、错误路径与物种表锚点校验，全部通过退出码 0）。
