@@ -66,8 +66,12 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	pet_id     INTEGER NOT NULL REFERENCES pets(id),
 	delta      INTEGER NOT NULL,
 	reason     TEXT NOT NULL,
+	request_id TEXT,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
+	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
 `
 	_, err := db.Exec(ddl)
 	return err

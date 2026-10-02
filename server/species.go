@@ -102,17 +102,7 @@ func validEgg(id string) bool {
 	return false
 }
 
-// 升级阈值（累计积分）：Lv2=20、Lv3=60。M1 写死；M2 将改为启动可配置。
-var levelThresholds = []int{20, 60}
-
-// nextLevelPoints 返回该等级的下一级累计积分目标，满级返回 nil。
-func nextLevelPoints(level int) *int {
-	if level-1 < 0 || level-1 >= len(levelThresholds) {
-		return nil
-	}
-	v := levelThresholds[level-1]
-	return &v
-}
+// 升级阈值由 srv.levels 持有（默认 Lv2=20、Lv3=60，启动时经 PET_LEVELS_FILE 可配置，见 levels.go）。
 
 func speciesImageURL(s speciesInfo, level int) string {
 	idx := level - 1
@@ -138,14 +128,14 @@ func speciesJSON(s speciesInfo, level int) map[string]any {
 	}
 }
 
-func petJSON(petID int64, name string, level, points int, s speciesInfo) map[string]any {
+func petJSON(petID int64, name string, level, points int, s speciesInfo, lc LevelConfig) map[string]any {
 	return map[string]any{
 		"id":              petID,
 		"name":            name,
 		"species":         speciesJSON(s, level),
 		"level":           level,
 		"points":          points,
-		"nextLevelPoints": nextLevelPoints(level),
+		"nextLevelPoints": NextLevelPoints(level, lc),
 	}
 }
 

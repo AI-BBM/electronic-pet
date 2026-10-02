@@ -32,6 +32,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 		}
 		return errors.New("invalid JSON body")
 	}
+	if dec.More() { // 拒绝单个 JSON 对象之后的尾随内容
+		return errors.New("invalid JSON body")
+	}
 	return nil
 }
 
@@ -134,7 +137,7 @@ func (s *srv) petByStudentID(studentID int64) (map[string]any, error) {
 	if !ok {
 		return nil, errors.New("species not found: " + speciesID)
 	}
-	return petJSON(petID, petName, int(level), int(points), sp), nil
+	return petJSON(petID, petName, int(level), int(points), sp, s.levels), nil
 }
 
 // handleEggs 蛋架列表（6 颗，颜色互异，仅视觉）。
@@ -203,7 +206,7 @@ func (s *srv) handleAdopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"pet": petJSON(petID, sp.Name, 1, 0, sp),
+		"pet": petJSON(petID, sp.Name, 1, 0, sp, s.levels),
 	})
 }
 

@@ -69,3 +69,6 @@ func NextLevelPoints(level int, lc LevelConfig) *int {
 		return nil
 	}
 }
+
+// LevelsFileEnv 指定等级阈值 JSON 文件的环境变量；未设置时用默认阈值 20/60。
+const LevelsFileEnv = "PET_LEVELS_FILE"

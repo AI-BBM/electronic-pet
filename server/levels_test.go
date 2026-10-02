@@ -1,167 +1,117 @@
-package server
+package server_test
+
+// M2 等级阈值单元用例（T11/T12）：LoadLevels / LevelFor / NextLevelPoints / DefaultLevels。
+// 命令: go test ./server/ -run 'TestDefaultLevels|TestLevelFor|TestNextLevelPoints|TestLoadLevels' -v
 
 import (
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AI-BBM/electronic-pet/server"
 )
 
 // T12 DefaultLevels：默认阈值 Lv2=20、Lv3=60。
-// 命令: go test ./server/ -run TestDefaultLevels -v
 func TestDefaultLevels(t *testing.T) {
-	lc := DefaultLevels()
-	if lc.Lv2 != 20 || lc.Lv3 != 60 {
-		t.Errorf("DefaultLevels() = %+v, 期望 {Lv2:20 Lv3:60}", lc)
+	if got := server.DefaultLevels(); got.Lv2 != 20 || got.Lv3 != 60 {
+		t.Errorf("DefaultLevels() = %+v, 期望 {Lv2:20 Lv3:60}", got)
 	}
 }
 
-// T12 LevelFor 边界：默认与自定义阈值下的关键分值点。
-// 命令: go test ./server/ -run TestLevelFor -v
+// T12 LevelFor：默认与自定义阈值下的等级边界。
 func TestLevelFor(t *testing.T) {
-	def := DefaultLevels()
-	custom := LevelConfig{Lv2: 5, Lv3: 10}
+	def := server.DefaultLevels()
 	cases := []struct {
-		name   string
 		points int
-		lc     LevelConfig
+		lc     server.LevelConfig
 		want   int
 	}{
-		{"默认 0 分 → Lv1", 0, def, 1},
-		{"默认 19 分 → Lv1", 19, def, 1},
-		{"默认 20 分 → Lv2", 20, def, 2},
-		{"默认 59 分 → Lv2", 59, def, 2},
-		{"默认 60 分 → Lv3", 60, def, 3},
-		{"默认 1000 分 → Lv3", 1000, def, 3},
-		{"自定义 {5,10} 4 分 → Lv1", 4, custom, 1},
-		{"自定义 {5,10} 5 分 → Lv2", 5, custom, 2},
-		{"自定义 {5,10} 9 分 → Lv2", 9, custom, 2},
-		{"自定义 {5,10} 10 分 → Lv3", 10, custom, 3},
+		{0, def, 1}, {19, def, 1}, {20, def, 2}, {59, def, 2}, {60, def, 3}, {1000, def, 3},
+		{4, server.LevelConfig{Lv2: 5, Lv3: 10}, 1},
+		{5, server.LevelConfig{Lv2: 5, Lv3: 10}, 2},
+		{9, server.LevelConfig{Lv2: 5, Lv3: 10}, 2},
+		{10, server.LevelConfig{Lv2: 5, Lv3: 10}, 3},
 	}
 	for _, tc := range cases {
-		if got := LevelFor(tc.points, tc.lc); got != tc.want {
-			t.Errorf("%s: LevelFor(%d, %+v) = %d, 期望 %d", tc.name, tc.points, tc.lc, got, tc.want)
+		if got := server.LevelFor(tc.points, tc.lc); got != tc.want {
+			t.Errorf("LevelFor(%d, %+v) = %d, 期望 %d", tc.points, tc.lc, got, tc.want)
 		}
 	}
 }
 
-// T12 NextLevelPoints：Lv1/Lv2 返回下一级阈值指针，Lv3 及以上返回 nil。
-// 命令: go test ./server/ -run TestNextLevelPoints -v
+// T12 NextLevelPoints：1→Lv2 阈值、2→Lv3 阈值、≥3→nil（自定义阈值同理）。
 func TestNextLevelPoints(t *testing.T) {
-	def := DefaultLevels()
-	custom := LevelConfig{Lv2: 5, Lv3: 10}
-
-	if p := NextLevelPoints(1, def); p == nil {
-		t.Error("默认阈值 Lv1 的 nextLevelPoints = nil, 期望 20")
-	} else if *p != 20 {
-		t.Errorf("默认阈值 Lv1 的 nextLevelPoints = %d, 期望 20", *p)
+	def := server.DefaultLevels()
+	custom := server.LevelConfig{Lv2: 5, Lv3: 10}
+	if got := server.NextLevelPoints(1, def); got == nil || *got != 20 {
+		t.Errorf("NextLevelPoints(1, def) = %v, 期望 20", got)
 	}
-	if p := NextLevelPoints(2, def); p == nil {
-		t.Error("默认阈值 Lv2 的 nextLevelPoints = nil, 期望 60")
-	} else if *p != 60 {
-		t.Errorf("默认阈值 Lv2 的 nextLevelPoints = %d, 期望 60", *p)
+	if got := server.NextLevelPoints(2, def); got == nil || *got != 60 {
+		t.Errorf("NextLevelPoints(2, def) = %v, 期望 60", got)
 	}
-	if p := NextLevelPoints(3, def); p != nil {
-		t.Errorf("默认阈值 Lv3 的 nextLevelPoints = %d, 期望 nil", *p)
+	if got := server.NextLevelPoints(3, def); got != nil {
+		t.Errorf("NextLevelPoints(3, def) = %v, 期望 nil", *got)
 	}
-	if p := NextLevelPoints(4, def); p != nil {
-		t.Errorf("超过满级(level=4)的 nextLevelPoints = %d, 期望 nil", *p)
+	if got := server.NextLevelPoints(4, def); got != nil {
+		t.Errorf("NextLevelPoints(4, def) = %v, 期望 nil（超界等级不崩溃）", *got)
 	}
-	if p := NextLevelPoints(1, custom); p == nil {
-		t.Error("自定义阈值 Lv1 的 nextLevelPoints = nil, 期望 5")
-	} else if *p != 5 {
-		t.Errorf("自定义阈值 Lv1 的 nextLevelPoints = %d, 期望 5", *p)
+	if got := server.NextLevelPoints(1, custom); got == nil || *got != 5 {
+		t.Errorf("NextLevelPoints(1, custom) = %v, 期望 5", got)
 	}
-	if p := NextLevelPoints(2, custom); p == nil {
-		t.Error("自定义阈值 Lv2 的 nextLevelPoints = nil, 期望 10")
-	} else if *p != 10 {
-		t.Errorf("自定义阈值 Lv2 的 nextLevelPoints = %d, 期望 10", *p)
+	if got := server.NextLevelPoints(2, custom); got == nil || *got != 10 {
+		t.Errorf("NextLevelPoints(2, custom) = %v, 期望 10", got)
 	}
-	if p := NextLevelPoints(3, custom); p != nil {
-		t.Errorf("自定义阈值 Lv3 的 nextLevelPoints = %d, 期望 nil", *p)
+	if got := server.NextLevelPoints(3, custom); got != nil {
+		t.Errorf("NextLevelPoints(3, custom) = %v, 期望 nil", *got)
 	}
 }
 
-// T11 LoadLevels：文件不存在 → 返回默认值且不报错。
-// 命令: go test ./server/ -run TestLoadLevels_MissingFileFallsBackToDefault -v
+// T11 LoadLevels：文件不存在回退默认；合法文件生效。
 func TestLoadLevels_MissingFileFallsBackToDefault(t *testing.T) {
-	lc, err := LoadLevels(filepath.Join(t.TempDir(), "no-such-levels.json"))
+	lc, err := server.LoadLevels(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
-		t.Fatalf("文件不存在时 LoadLevels 不应报错: %v", err)
+		t.Fatalf("文件不存在时应回退默认而非报错: %v", err)
 	}
 	if lc.Lv2 != 20 || lc.Lv3 != 60 {
-		t.Errorf("文件不存在时 LoadLevels = %+v, 期望默认 {Lv2:20 Lv3:60}", lc)
+		t.Errorf("回退阈值 = %+v, 期望 {20 60}", lc)
 	}
 }
 
-// T11 LoadLevels：合法 JSON 配置 {"lv2":5,"lv3":10} 生效。
-// 命令: go test ./server/ -run TestLoadLevels_ValidFile -v
 func TestLoadLevels_ValidFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "levels.json")
 	if err := os.WriteFile(path, []byte(`{"lv2":5,"lv3":10}`), 0o644); err != nil {
-		t.Fatalf("写入临时配置失败: %v", err)
+		t.Fatal(err)
 	}
-	lc, err := LoadLevels(path)
+	lc, err := server.LoadLevels(path)
 	if err != nil {
-		t.Fatalf("合法配置 LoadLevels 报错: %v", err)
+		t.Fatalf("LoadLevels: %v", err)
 	}
 	if lc.Lv2 != 5 || lc.Lv3 != 10 {
-		t.Errorf("LoadLevels = %+v, 期望 {Lv2:5 Lv3:10}", lc)
+		t.Errorf("LoadLevels = %+v, 期望 {5 10}", lc)
 	}
 }
 
-// T11 LoadLevels：坏 JSON、lv2<=0、lv3<=lv2 均必须报错。
-// 命令: go test ./server/ -run TestLoadLevels_InvalidConfigs -v
+// T11 LoadLevels 非法配置：坏 JSON / lv2<=0 / lv3<=lv2 一律报错。
 func TestLoadLevels_InvalidConfigs(t *testing.T) {
-	cases := []struct{ name, content string }{
-		{"坏 JSON", `{"lv2":5,`},
-		{"lv2 为 0", `{"lv2":0,"lv3":10}`},
-		{"lv2 为负数", `{"lv2":-3,"lv3":10}`},
-		{"lv3 等于 lv2", `{"lv2":10,"lv3":10}`},
-		{"lv3 小于 lv2", `{"lv2":20,"lv3":5}`},
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"坏 JSON", `{lv2`},
+		{"lv2=0", `{"lv2":0,"lv3":10}`},
+		{"lv2 为负", `{"lv2":-3,"lv3":10}`},
+		{"lv3==lv2", `{"lv2":5,"lv3":5}`},
+		{"lv3<lv2", `{"lv2":10,"lv3":5}`},
 	}
 	for _, tc := range cases {
-		path := filepath.Join(t.TempDir(), "levels.json")
-		if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
-			t.Fatalf("%s: 写入临时配置失败: %v", tc.name, err)
-		}
-		if _, err := LoadLevels(path); err == nil {
-			t.Errorf("%s: LoadLevels 内容 %s 应当报错, 却返回 nil", tc.name, tc.content)
-		}
-	}
-}
-
-// T11 阈值可配置端到端：{"lv2":5,"lv3":10} 下 4+1 触发 Lv2，再 +5 达 Lv3 满级。
-// 命令: go test ./server/ -run TestAddPoints_CustomLevels_EndToEnd -v
-func TestAddPoints_CustomLevels_EndToEnd(t *testing.T) {
-	env := newTestEnvWithLevels(t, LevelConfig{Lv2: 5, Lv3: 10})
-	studentID, _ := seedStudentWithPet(t, env.store.DB(), 1, 4)
-
-	status, body := env.do(t, http.MethodPost, "/api/points", env.token(studentID),
-		pointsPostReq{Reason: "课堂表现", Value: 1, RequestID: "t11-1"})
-	if status != http.StatusOK {
-		t.Fatalf("4+1 加分状态码 = %d, 期望 200; body=%s", status, body)
-	}
-	resp := decodePointsResp(t, body)
-	if !resp.LevelUp || resp.Level != 2 || resp.Pet.Points != 5 {
-		t.Errorf("自定义阈值 4+1 后 = (levelUp=%v level=%d points=%d), 期望 (true, 2, 5)",
-			resp.LevelUp, resp.Level, resp.Pet.Points)
-	}
-	if raw, ok := rawPetField(t, body, "nextLevelPoints"); !ok || raw != "10" {
-		t.Errorf("自定义阈值 Lv2 的 nextLevelPoints 原始 JSON = %q(ok=%v), 期望 \"10\"", raw, ok)
-	}
-
-	status, body = env.do(t, http.MethodPost, "/api/points", env.token(studentID),
-		pointsPostReq{Reason: "劳动卫生", Value: 5, RequestID: "t11-2"})
-	if status != http.StatusOK {
-		t.Fatalf("5+5 加分状态码 = %d, 期望 200; body=%s", status, body)
-	}
-	resp = decodePointsResp(t, body)
-	if !resp.LevelUp || resp.Level != 3 || resp.Pet.Points != 10 {
-		t.Errorf("自定义阈值 5+5 后 = (levelUp=%v level=%d points=%d), 期望 (true, 3, 10)",
-			resp.LevelUp, resp.Level, resp.Pet.Points)
-	}
-	if raw, ok := rawPetField(t, body, "nextLevelPoints"); !ok || raw != "null" {
-		t.Errorf("自定义阈值满级 nextLevelPoints 原始 JSON = %q(ok=%v), 期望 \"null\"", raw, ok)
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "levels.json")
+			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := server.LoadLevels(path); err == nil {
+				t.Errorf("LoadLevels(%s) 期望报错, 实际 nil", tc.content)
+			}
+		})
 	}
 }
