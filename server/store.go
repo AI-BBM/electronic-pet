@@ -69,10 +69,50 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	request_id TEXT,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+`
+	// point_logs 的索引不能与建表同批执行：M1 老库的该表已存在（无 request_id 列），
+	// 建表会被跳过而索引会因缺列崩溃（issue #11）。必须先补列、再建索引。
+	if _, err := db.Exec(ddl); err != nil {
+		return err
+	}
+	hasRequestID, err := columnExists(db, "point_logs", "request_id")
+	if err != nil {
+		return err
+	}
+	if !hasRequestID {
+		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN request_id TEXT`); err != nil {
+			return fmt.Errorf("migrate: add point_logs.request_id: %w", err)
+		}
+	}
+	const idx = `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
 	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
 `
-	_, err := db.Exec(ddl)
+	_, err = db.Exec(idx)
 	return err
+}
+
+// columnExists 用 pragma table_info 判断列是否存在（table 为代码内常量，非外部输入）。
+func columnExists(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid         int
+			name, ctype string
+			notNull, pk int
+			dflt        sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
