@@ -8,6 +8,8 @@ import (
 // 占位 manifest：正式 manifest（version/eggs/species[id,name,rarity,stages,silhouette]）
 // 由素材线 Issue #4 交付后替换，species.id 为稳定 slug，替换时仅换 stages 的 URL。
 // M1 仅幼年期（stages[0]），silhouette 留空。
+// id/name/rarity 已对齐 canonical 物种定稿表 tools/assets/species.meta.json（1d00e4c）；
+// 立绘仍为 design/characters/ 探索稿降采样占位（三张循环）。
 type speciesInfo struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
@@ -23,18 +25,18 @@ const (
 )
 
 var speciesList = []speciesInfo{
-	{"robot-cat", "机械猫", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
-	{"pixel-dog", "像素狗", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"moon-bunny", "月光兔", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
-	{"chip-hamster", "芯片仓鼠", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
-	{"robo-penguin", "电子企鹅", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
-	{"turbo-hummingbird", "旋风蜂鸟", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"glow-jelly", "荧光水母", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
-	{"purr-seal", "咕噜海豹", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"star-fox", "星辰狐", rarityRare, []string{"/img/pets/bunny.png"}, ""},
-	{"volt-dragon", "雷光龙", rarityRare, []string{"/img/pets/robotcat.png"}, ""},
-	{"maglev-whale", "磁浮鲸", rarityRare, []string{"/img/pets/pixeldog.png"}, ""},
-	{"mecha-lion", "王者机械狮", rarityEpic, []string{"/img/pets/robotcat.png"}, ""},
+	{"cat", "电力猫", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
+	{"dog", "像素狗", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
+	{"bunny", "云绒兔", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
+	{"hamster", "芯片仓鼠", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
+	{"chick", "蛋壳鸡", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
+	{"penguin", "冰川企鹅", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
+	{"koala", "电池考拉", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
+	{"axolotl", "六角恐龙", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
+	{"fox", "星辰狐", rarityRare, []string{"/img/pets/bunny.png"}, ""},
+	{"panda", "太极熊猫", rarityRare, []string{"/img/pets/robotcat.png"}, ""},
+	{"dino", "机械恐龙", rarityRare, []string{"/img/pets/pixeldog.png"}, ""},
+	{"dragon", "神威小龙", rarityEpic, []string{"/img/pets/robotcat.png"}, ""},
 }
 
 // 稀有度权重：普通 70% / 稀有 25% / 史诗 5%（PRD M1）。
