@@ -47,12 +47,19 @@ func newHandler(t *testing.T) http.Handler {
 }
 
 // newHandlerAt 在指定 dbPath 上构建被测 handler（重启场景复用同一 DB 文件）。
+// 测试结束自动 Close 释放 SQLite 句柄（Windows 下文件被占用会导致 TempDir 清理失败），
+// 多次调用时按 t.Cleanup LIFO 逆序关闭。
 func newHandlerAt(t *testing.T, dbPath string) http.Handler {
 	t.Helper()
 	h, err := server.New(dbPath)
 	if err != nil {
 		t.Fatalf("server.New(%q) 返回错误: %v", dbPath, err)
 	}
+	t.Cleanup(func() {
+		if c, ok := h.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	})
 	return h
 }
 
