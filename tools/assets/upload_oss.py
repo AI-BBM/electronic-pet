@@ -30,6 +30,11 @@ def main() -> int:
     ap.add_argument("--src", required=True, help="布局根目录（含 manifest.json、pets/、eggs/）")
     ap.add_argument("--mock", action="store_true", help="mock 模式：拷贝到本地目录代替真实上传")
     ap.add_argument("--dst", help="mock 目标目录（默认 assets/oss-mock）；真实上传模式忽略")
+    ap.add_argument(
+        "--public-read",
+        action="store_true",
+        help="真实上传时为对象设置 public-read ACL（私有桶对外展示用）；mock 模式忽略",
+    )
     args = ap.parse_args()
     src = Path(args.src)
     if not src.is_dir():
@@ -69,13 +74,19 @@ def main() -> int:
 
     auth = oss2.Auth(os.environ["OSS_ACCESS_KEY_ID"], os.environ["OSS_ACCESS_KEY_SECRET"])
     bucket = oss2.Bucket(auth, os.environ["OSS_ENDPOINT"], os.environ["OSS_BUCKET"])
+    headers = {"x-oss-object-acl": "public-read"} if args.public_read else None
     count = 0
     for path in iter_files(src):
         key = path.relative_to(src).as_posix()
-        bucket.put_object(key, path.read_bytes())
+        bucket.put_object(key, path.read_bytes(), headers=headers)
         count += 1
         print(f"已上传 {key}")
     print(f"上传完成：{count} 个对象")
+    host = os.environ["OSS_ENDPOINT"].split("://", 1)[-1].strip("/")
+    base = f"https://{os.environ['OSS_BUCKET']}.{host}"
+    keys = [p.relative_to(src).as_posix() for p in iter_files(src)]
+    for key in keys[:3]:
+        print(f"{base}/{key}")
     return 0
 
 
