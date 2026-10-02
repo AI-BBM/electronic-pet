@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>我的宠物 · 加分与流水（M2 骨架预览）</title>
+  <link rel="stylesheet" href="/static/css/points.css">
+  <style>
+    body { font-family: system-ui, "Microsoft YaHei", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; color: #243244; }
+    h1 { font-size: 20px; }
+    .dev-token { background: #fff8e1; border: 1px solid #f0d47c; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-bottom: 16px; }
+    .dev-token input { width: 420px; }
+    .card { border: 1px solid #dfe5ec; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .reason-tags label { margin-right: 12px; }
+    .card button { padding: 6px 18px; }
+    .log-pager { margin-top: 8px; }
+    .log-pager button { margin-right: 8px; }
+    #msg { margin-left: 12px; color: #b00; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>我的宠物 · 加分与积分流水</h1>
+
+  <!-- 骨架期：M1 的 join 流程上线后 token 由登录态写入 localStorage，此输入框删除 -->
+  <div class="dev-token">
+    开发用 token（studentID 由 PM/管理端签发）：
+    <input id="token" placeholder="粘贴 SignToken 签发的 token">
+    <button id="save-token">保存</button>
+  </div>
+
+  <div class="card" id="pet-card">
+    <h2>加分</h2>
+    <div class="reason-tags" id="reason-tags"></div>
+    <p>自定义理由：<input id="custom-reason" placeholder="选填，覆盖预设标签"></p>
+    <p>分值：
+      <select id="value">
+        <option>1</option><option>2</option><option>3</option><option>4</option>
+        <option>5</option><option>6</option><option>7</option><option>8</option>
+        <option>9</option><option>10</option>
+      </select>
+    </p>
+    <button id="add">提交加分</button><span id="msg"></span>
+  </div>
+
+  <div class="card">
+    <h2>积分进度</h2>
+    <div class="point-progress" id="progress">尚未加载</div>
+  </div>
+
+  <div class="card">
+    <h2>积分流水</h2>
+    <ul class="point-log-list" id="log"></ul>
+    <div class="log-pager">
+      <button id="prev">上一页</button>
+      <button id="next">下一页</button>
+      <span id="page-info"></span>
+    </div>
+  </div>
+
+  <script src="/static/js/points.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var page = 1, total = 0, lastPet = null;
+      var $ = function (id) { return document.getElementById(id); };
+
+      $('save-token').onclick = function () {
+        localStorage.setItem('pet_token', $('token').value.trim());
+        $('msg').textContent = '';
+        refresh();
+      };
+      $('token').value = localStorage.getItem('pet_token') || '';
+
+      Points.PRESET_REASONS.forEach(function (r, i) {
+        var label = document.createElement('label');
+        label.innerHTML = '<input type="radio" name="reason" value="' + r + '"' + (i === 0 ? ' checked' : '') + '> ' + r;
+        $('reason-tags').appendChild(label);
+      });
+
+      function fail(e) { $('msg').textContent = e.message; }
+
+      function refresh() {
+        if (!localStorage.getItem('pet_token')) return;
+        Points.loadLog(page).then(function (data) {
+          total = Points.renderLog($('log'), data);
+          $('page-info').textContent = '第 ' + data.page + ' 页 / 共 ' + total + ' 条';
+        }).catch(fail);
+        // 骨架期进度条由加分响应刷新；完整档案接口 GET /api/pet/me 属 M1
+      }
+
+      $('add').onclick = function () {
+        var reason = $('custom-reason').value.trim() || document.querySelector('input[name=reason]:checked').value;
+        var value = parseInt($('value').value, 10);
+        $('msg').textContent = '';
+        Points.addPoints(reason, value).then(function (resp) {
+          lastPet = resp.pet;
+          Points.renderProgress($('progress'), resp.pet);
+          if (resp.levelUp) {
+            Points.playLevelUp(document.body, resp.level);
+          } else if (!resp.added) {
+            $('msg').textContent = '重复提交已忽略';
+          }
+          refresh();
+        }).catch(fail);
+      };
+
+      $('prev').onclick = function () { if (page > 1) { page--; refresh(); } };
+      $('next').onclick = function () { if (page * 20 < total) { page++; refresh(); } };
+
+      refresh();
+    })();
+  </script>
+</body>
+</html>
