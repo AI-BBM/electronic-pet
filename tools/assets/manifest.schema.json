@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "electronic-pet species manifest",
+  "description": "种类清单（docs/product/assets-spec.md）。真实素材管线产出的 manifest 为全量字段；前端占位 manifest 允许 stages 只含部分阶段、silhouette/eggs 取值可空。",
+  "type": "object",
+  "required": ["version", "eggs", "species"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "eggs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "common": { "type": ["string", "null"], "minLength": 1 },
+        "rare": { "type": ["string", "null"], "minLength": 1 },
+        "epic": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "species": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "rarity"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "rarity": { "enum": ["common", "rare", "epic"] },
+          "stages": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "1": { "type": "string", "minLength": 1 },
+              "2": { "type": "string", "minLength": 1 },
+              "3": { "type": "string", "minLength": 1 }
+            }
+          },
+          "silhouette": { "type": ["string", "null"], "minLength": 1 }
+        }
+      }
+    }
+  }
+}
