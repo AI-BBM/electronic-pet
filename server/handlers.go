@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -15,13 +16,29 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// decodeJSON 严格解析请求体。
-func decodeJSON(r *http.Request, dst any) error {
+// maxBodyBytes M1 各 POST 的合法请求体远小于该上限，防无界解码 DoS。
+const maxBodyBytes = 64 << 10
+
+var errBodyTooLarge = errors.New("request body too large")
+
+// decodeJSON 严格解析请求体；超限返回 errBodyTooLarge（413）。
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(dst); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			return errBodyTooLarge
+		}
 		return errors.New("invalid JSON body")
 	}
 	return nil
+}
+
+// writeInternal 记录内部错误到服务端日志，向客户端只回笼统文案（不透传驱动细节）。
+func writeInternal(w http.ResponseWriter, err error, context string) {
+	log.Printf("[500] %s: %v", context, err)
+	writeJSON(w, http.StatusInternalServerError, errJSON("服务器开小差了，请稍后再试"))
 }
 
 type joinRequest struct {
@@ -33,7 +50,11 @@ type joinRequest struct {
 // handleJoin 班级码 + 姓名 + 学号进入；同班同学号幂等，签发新 token。
 func (s *srv) handleJoin(w http.ResponseWriter, r *http.Request) {
 	var req joinRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
@@ -49,41 +70,41 @@ func (s *srv) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer s.dbMu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("db begin: %v", err))
+		writeInternal(w, err, "db begin")
 		return
 	}
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`INSERT INTO classes(code) VALUES(?) ON CONFLICT(code) DO NOTHING`, req.ClassCode); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("upsert class: %v", err))
+		writeInternal(w, err, "upsert class")
 		return
 	}
 	var classID int64
 	if err := tx.QueryRow(`SELECT id FROM classes WHERE code = ?`, req.ClassCode).Scan(&classID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load class: %v", err))
+		writeInternal(w, err, "load class")
 		return
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO students(class_id, name, student_no) VALUES(?,?,?)
 		 ON CONFLICT(class_id, student_no) DO NOTHING`, classID, req.Name, req.StudentNo); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("upsert student: %v", err))
+		writeInternal(w, err, "upsert student")
 		return
 	}
 	var studentID int64
 	if err := tx.QueryRow(
 		`SELECT id FROM students WHERE class_id = ? AND student_no = ?`, classID, req.StudentNo,
 	).Scan(&studentID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load student: %v", err))
+		writeInternal(w, err, "load student")
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("commit: %v", err))
+		writeInternal(w, err, "commit")
 		return
 	}
 
 	pet, err := s.petByStudentID(studentID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load pet: %v", err))
+		writeInternal(w, err, "load pet")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -128,7 +149,11 @@ type adoptRequest struct {
 // handleAdopt 领蛋孵化：事务内绑定学生与随机种类；一学生一宠。
 func (s *srv) handleAdopt(w http.ResponseWriter, r *http.Request) {
 	var req adoptRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
@@ -143,7 +168,7 @@ func (s *srv) handleAdopt(w http.ResponseWriter, r *http.Request) {
 	defer s.dbMu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("db begin: %v", err))
+		writeInternal(w, err, "db begin")
 		return
 	}
 	defer tx.Rollback()
@@ -155,7 +180,7 @@ func (s *srv) handleAdopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load pet: %v", err))
+		writeInternal(w, err, "load pet")
 		return
 	}
 
@@ -165,16 +190,16 @@ func (s *srv) handleAdopt(w http.ResponseWriter, r *http.Request) {
 		studentID, sp.ID, sp.Name, 1, 0, eggID,
 	)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("insert pet: %v", err))
+		writeInternal(w, err, "insert pet")
 		return
 	}
 	petID, err = res.LastInsertId()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("pet id: %v", err))
+		writeInternal(w, err, "pet id")
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("commit: %v", err))
+		writeInternal(w, err, "commit")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -187,7 +212,7 @@ func (s *srv) handlePetMe(w http.ResponseWriter, r *http.Request) {
 	studentID := r.Context().Value(ctxKeyStudent).(int64)
 	pet, err := s.petByStudentID(studentID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load pet: %v", err))
+		writeInternal(w, err, "load pet")
 		return
 	}
 	if pet == nil {
@@ -207,7 +232,11 @@ type renameRequest struct {
 // handleRename 宠物名自定义，一生一次（默认名为种类名）。
 func (s *srv) handleRename(w http.ResponseWriter, r *http.Request) {
 	var req renameRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
@@ -226,7 +255,7 @@ func (s *srv) handleRename(w http.ResponseWriter, r *http.Request) {
 	defer s.dbMu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("db begin: %v", err))
+		writeInternal(w, err, "db begin")
 		return
 	}
 	defer tx.Rollback()
@@ -239,7 +268,7 @@ func (s *srv) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load pet: %v", err))
+		writeInternal(w, err, "load pet")
 		return
 	}
 	if customized != 0 {
@@ -247,16 +276,16 @@ func (s *srv) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.Exec(`UPDATE pets SET name = ?, name_customized = 1 WHERE id = ?`, name, petID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("rename: %v", err))
+		writeInternal(w, err, "rename")
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("commit: %v", err))
+		writeInternal(w, err, "commit")
 		return
 	}
 	pet, err := s.petByStudentID(studentID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errJSON("load pet: %v", err))
+		writeInternal(w, err, "load pet")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pet": pet})
