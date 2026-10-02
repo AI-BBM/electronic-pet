@@ -1,0 +1,14 @@
+{
+  "cat":     {"name": "电力猫",   "rarity": "common"},
+  "dog":     {"name": "像素狗",   "rarity": "common"},
+  "bunny":   {"name": "云绒兔",   "rarity": "common"},
+  "hamster": {"name": "芯片仓鼠", "rarity": "common"},
+  "chick":   {"name": "蛋壳鸡",   "rarity": "common"},
+  "penguin": {"name": "冰川企鹅", "rarity": "common"},
+  "koala":   {"name": "电池考拉", "rarity": "common"},
+  "axolotl": {"name": "六角恐龙", "rarity": "common"},
+  "fox":     {"name": "星辰狐",   "rarity": "rare"},
+  "panda":   {"name": "太极熊猫", "rarity": "rare"},
+  "dino":    {"name": "机械恐龙", "rarity": "rare"},
+  "dragon":  {"name": "神威小龙", "rarity": "epic"}
+}
