@@ -67,9 +67,8 @@
       el.style.setProperty('--progress', '100%');
       return;
     }
-    var prev = pet.level === 1 ? 0 : next; // Lv1 从 0 起算；Lv2 基线为 Lv2 阈值前的累计段
-    var base = pet.level === 2 ? Math.round(next / 3) : 0; // 粗略基线，SPA 接入时可换成阈值配置接口
-    prev = base;
+    // 粗略基线：Lv1 从 0 起算，Lv2 进度段以 Lv2 阈值为基线（SPA 接入时可换成阈值配置接口）
+    var prev = pet.level === 2 ? Math.round(next / 3) : 0;
     var pct = Math.max(0, Math.min(100, Math.round(((pet.points - prev) / (next - prev)) * 100)));
     el.innerHTML = 'Lv' + pet.level + ' · ' + pet.points + ' / ' + next + ' 分';
     el.style.setProperty('--progress', pct + '%');

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -120,7 +121,8 @@ func (a *api) handleAddPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req addPointsReq
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&req); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err := dec.Decode(&req); err != nil || dec.More() {
 		writeError(w, http.StatusBadRequest, "请求体不是合法 JSON")
 		return
 	}
@@ -251,14 +253,17 @@ func (a *api) methodNotAllowed(allow string) http.HandlerFunc {
 	}
 }
 
-// parsePage 解析 page 查询参数：缺省 1，非数字或 <1 报错。
+// maxPage 是 page 的上界：超出后 (page-1)*logPageSize 会整型溢出。
+const maxPage = math.MaxInt / logPageSize
+
+// parsePage 解析 page 查询参数：缺省 1，非数字、<1 或超出上界报错。
 func parsePage(r *http.Request) (int, error) {
 	p := r.URL.Query().Get("page")
 	if p == "" {
 		return 1, nil
 	}
 	n, err := strconv.Atoi(p)
-	if err != nil || n < 1 {
+	if err != nil || n < 1 || n > maxPage {
 		return 0, fmt.Errorf("page 非法: %q", p)
 	}
 	return n, nil

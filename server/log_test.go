@@ -123,3 +123,24 @@ func TestImmutability_MethodNotAllowed(t *testing.T) {
 		t.Error("PUT /api/pet/me/log 状态码非 405, 期望 405")
 	}
 }
+
+// T14 page 溢出回灌用例（对抗审查发现）：超大 page 的 (page-1)*pageSize 会整型溢出，
+// SQLite 把负 OFFSET 当 0，曾导致回退返回第一页数据；修复后须拦截或返回空列表。
+// 命令: go test ./server/ -run TestLog_PageOverflow_NotReturnFirstPage -v
+func TestLog_PageOverflow_NotReturnFirstPage(t *testing.T) {
+	env := newTestEnv(t)
+	db := env.store.DB()
+	studentID, petID := seedStudentWithPet(t, db, 1, 0)
+	seedLogs(t, db, petID, 5)
+	token := env.token(studentID)
+
+	status, body := env.do(t, http.MethodGet, "/api/pet/me/log?page=9223372036854775807", token, nil)
+	if status != http.StatusOK && status != http.StatusBadRequest {
+		t.Fatalf("超大 page 状态码 = %d, 期望 200 或 400; body=%s", status, body)
+	}
+	if status == http.StatusOK {
+		if lr := decodeLogList(t, body); len(lr.Items) != 0 {
+			t.Errorf("超大 page 返回 %d 条数据, 期望空列表（不得回退第一页）; body=%s", len(lr.Items), body)
+		}
+	}
+}
