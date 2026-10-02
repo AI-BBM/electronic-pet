@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280">
+<title>电子宠物 · 班级激励</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 进入页 -->
+  <section class="view" data-view="join" hidden>
+    <div class="card join-card">
+      <h1 class="logo">🥚 电子宠物</h1>
+      <p class="subtitle">输入班级信息，领养你的专属伙伴</p>
+      <form id="join-form">
+        <label>班级码<input id="join-class" placeholder="例如：class301" autocomplete="off" required></label>
+        <label>姓名<input id="join-name" placeholder="你的名字" autocomplete="off" required></label>
+        <label>学号<input id="join-no" placeholder="例如：01" autocomplete="off" required></label>
+        <button type="submit" class="btn primary">进入班级</button>
+      </form>
+      <p id="join-error" class="error" hidden></p>
+    </div>
+  </section>
+
+  <!-- 领蛋页 -->
+  <section class="view" data-view="eggs" hidden>
+    <div class="card">
+      <h2>挑一颗蛋吧</h2>
+      <p class="subtitle">每颗蛋都藏着惊喜，颜色只是外观哦</p>
+      <div id="egg-rack" class="egg-rack"></div>
+      <div class="row">
+        <button id="adopt-selected" class="btn primary" disabled>就选这颗，孵化！</button>
+        <button id="adopt-random" class="btn ghost">随机一颗</button>
+      </div>
+      <p id="eggs-error" class="error" hidden></p>
+    </div>
+  </section>
+
+  <!-- 孵化过场 -->
+  <section class="view" data-view="hatch" hidden>
+    <div class="card hatch-card">
+      <div id="hatch-egg" class="hatch-egg"><div class="crack c1"></div><div class="crack c2"></div><div class="crack c3"></div></div>
+      <div id="hatch-reveal" class="hatch-reveal" hidden>
+        <img id="hatch-img" alt="宠物立绘">
+        <h2 id="hatch-name"></h2>
+        <p id="hatch-rarity" class="rarity-badge"></p>
+        <button id="go-pet" class="btn primary">去看看我的宠物</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 我的宠物 -->
+  <section class="view" data-view="pet" hidden>
+    <div class="card pet-card">
+      <div class="pet-stage">
+        <img id="pet-img" alt="宠物立绘">
+      </div>
+      <div class="pet-info">
+        <div class="pet-title">
+          <h2 id="pet-name"></h2>
+          <button id="rename-btn" class="btn tiny ghost">改名</button>
+        </div>
+        <p id="pet-species" class="subtitle"></p>
+        <p class="rarity-badge" id="pet-rarity"></p>
+        <div class="level-row">
+          <span class="lv-badge" id="pet-level"></span>
+          <div class="progress"><div id="pet-progress" class="progress-bar"></div></div>
+          <span id="pet-points" class="points"></span>
+        </div>
+        <button class="btn primary" id="add-points-btn" disabled title="M2 即将开放">＋ 加分喂养</button>
+        <p class="hint">加分喂养将在 M2 上线，先把小伙伴领回家吧～</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
