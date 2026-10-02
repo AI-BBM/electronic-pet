@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -19,9 +20,10 @@ type srv struct {
 	db          *sql.DB
 	dbMu        sync.Mutex // 串行化 DB 访问（单连接 SQLite，事务内互斥）
 	tokenSecret string
+	levels      LevelConfig // 升级阈值，启动时可经 PET_LEVELS_FILE 覆盖（M2）
 }
 
-// New 构建 M1 完整路由（含内嵌前端）。同一 dbPath 可重复调用（幂等建表、密钥复用）。
+// New 构建完整路由（含内嵌前端）。同一 dbPath 可重复调用（幂等建表、密钥复用）。
 // 返回值实现 Close() error，调用方（含测试）用后应释放 SQLite 句柄（Windows 文件锁）。
 func New(dbPath string) (http.Handler, error) {
 	db, err := openDB(dbPath)
@@ -33,7 +35,14 @@ func New(dbPath string) (http.Handler, error) {
 		db.Close()
 		return nil, err
 	}
-	s := &srv{db: db, tokenSecret: secret}
+	levels := DefaultLevels()
+	if path := os.Getenv(LevelsFileEnv); path != "" {
+		if levels, err = LoadLevels(path); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	s := &srv{db: db, tokenSecret: secret, levels: levels}
 	return &appHandler{srv: s, mux: s.routes()}, nil
 }
 
@@ -59,8 +68,28 @@ func (s *srv) routes() http.Handler {
 	mux.Handle("GET /api/pet/me", authed(http.HandlerFunc(s.handlePetMe)))
 	mux.Handle("POST /api/pet/name", authed(http.HandlerFunc(s.handleRename)))
 
+	// M2 加分与积分流水。其余方法显式注册为 405（方法级 pattern 与 "GET /" 无冲突，
+	// 也不能用不带方法的 pattern——它与 "GET /" 互不为子集会 panic）；
+	// 流水不可改删（PRD M2），故 /api/points 仅 POST、/api/pet/me/log 仅 GET。
+	mux.Handle("POST /api/points", authed(http.HandlerFunc(s.handleAddPoints)))
+	mux.Handle("GET /api/pet/me/log", authed(http.HandlerFunc(s.handleLog)))
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		mux.HandleFunc(m+" /api/points", s.methodNotAllowed(http.MethodPost))
+	}
+	for _, m := range []string{http.MethodPut, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/pet/me/log", s.methodNotAllowed(http.MethodGet))
+	}
+
 	mux.Handle("GET /", s.staticHandler())
 	return mux
+}
+
+// methodNotAllowed 返回固定允许方法的 405 处理器（鉴权前拦截，M2 流水不可改删）。
+func (s *srv) methodNotAllowed(allow string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", allow)
+		writeJSON(w, http.StatusMethodNotAllowed, errJSON("方法不允许"))
+	}
 }
 
 // requireStudent 校验 Bearer token，把 studentID 注入 context。

@@ -1,0 +1,97 @@
+/* M2 加分与流水骨架样式（SPA 接入时并入全局样式） */
+
+.point-progress {
+  --progress: 0%;
+  position: relative;
+  height: 22px;
+  border-radius: 11px;
+  background: #e8ecf1;
+  overflow: hidden;
+  line-height: 22px;
+  text-align: center;
+  font-size: 12px;
+  color: #33445b;
+}
+
+.point-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--progress);
+  background: linear-gradient(90deg, #7cc4ff, #4a90e2);
+  transition: width 0.6s ease;
+}
+
+.point-progress > * {
+  position: relative;
+  z-index: 1;
+}
+
+.point-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.point-log-item {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 4px;
+  border-bottom: 1px dashed #dfe5ec;
+  font-size: 14px;
+}
+
+.point-log-value {
+  color: #2e9e5b;
+  font-weight: 600;
+}
+
+.point-log-time {
+  margin-left: auto;
+  color: #8a97a6;
+  font-size: 12px;
+}
+
+.point-log-empty {
+  color: #8a97a6;
+  padding: 12px 4px;
+}
+
+/* 升级进化表现：光效占位，正式立绘切换由素材线接入 */
+.evolution-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.72);
+  z-index: 999;
+  animation: evolution-fade 2.5s ease forwards;
+}
+
+.evolution-glow {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe98a 0%, rgba(255, 233, 138, 0) 70%);
+  animation: evolution-pop 1.2s ease-out;
+}
+
+.evolution-text {
+  font-size: 28px;
+  font-weight: 700;
+  color: #b7791f;
+}
+
+@keyframes evolution-pop {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+
+@keyframes evolution-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
