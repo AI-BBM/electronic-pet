@@ -1,0 +1,8 @@
+{"prompt":{
+  "10": {"class_type": "LoadImage", "inputs": {"image": "test_bunny.png"}},
+  "11": {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": "BiRefNet.safetensors"}},
+  "12": {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["11", 0], "image": ["10", 0]}},
+  "15": {"class_type": "InvertMask", "inputs": {"mask": ["12", 0]}},
+  "13": {"class_type": "JoinImageWithAlpha", "inputs": {"image": ["10", 0], "alpha": ["15", 0]}},
+  "14": {"class_type": "SaveImageAdvanced", "inputs": {"images": ["13", 0], "filename_prefix": "pet_alpha_test2", "format": "png", "format.bit_depth": "8-bit", "format.input_color_space": "sRGB"}}
+}}

@@ -1,0 +1,12 @@
+{"prompt":{
+  "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_int8_convrot.safetensors", "weight_dtype": "default"}},
+  "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_8b_w4a8.safetensors", "type": "qwen_image", "device": "default"}},
+  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+  "4": {"class_type": "EmptyLatentImage", "inputs": {"width": 2048, "height": 1152, "batch_size": 1}},
+  "6": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": "复古未来风格电子宠物小狗角色设计，圆润的糖果蓝配色塑料外壳，脸部是琥珀色CRT像素点阵屏，显示可爱像素笑脸，半透明外壳隐约露出内部齿轮与电路板，像90年代掌上电子宠物玩具的立体化造型。浅米色纯色背景，产品渲染图风格，柔和灯光，高细节，居中构图。"}},
+  "14": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": ""}},
+  "7": {"class_type": "KSampler", "inputs": {"model": ["1", 0], "positive": ["6", 0], "negative": ["14", 0], "latent_image": ["4", 0], "seed": 202, "steps": 25, "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1}},
+  "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["3", 0]}},
+  "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": "pet_v2_pixeldog"}}
+}
+}
