@@ -15,6 +15,9 @@
 T3/T4 为契约修正后的最终版（≤512 不放大；T4 用 1px 边界圈 fixture，
 理由见 PR #5 描述）。T22 为 PM 定稿 canonical 12 物种表（species.meta.json）
 入库后追加的锚点校验（8 common / 3 rare / 1 epic）。
+T23–T33 为 Issue #10（OSS 真实上传切换）追加：--url-prefix、--public-read
+的离线契约（经 PYTHONPATH 假 oss2 在子进程内替换，套件对无 oss2 机器同样全绿；
+凭据纪律扫描 + schema 不变锚点 84eac60）。
 """
 import json
 import os
@@ -451,11 +454,283 @@ def test_t22(tmp):
     assert dist == {"common": 8, "rare": 3, "epic": 1}, dist
 
 
+FAKE_NOOSS2 = 'raise ImportError("oss2 disabled (test fake)")\n'
+
+FAKE_RECORDER = '''import json, os
+_CALLS = os.environ.get("FAKE_OSS2_CALLS", "")
+class Auth:
+    def __init__(self, key_id, secret):
+        self.key_id, self.secret = key_id, secret
+class Bucket:
+    def __init__(self, auth, endpoint, bucket_name):
+        self.auth, self.endpoint, self.bucket_name = auth, endpoint, bucket_name
+    def put_object(self, key, data, headers=None):
+        if _CALLS:
+            with open(_CALLS, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"endpoint": self.endpoint, "bucket": self.bucket_name,
+                                    "key": key, "nbytes": len(data), "headers": headers}) + "\\n")
+        return key
+'''
+
+PFX = "https://laoli-storage.oss-cn-beijing.aliyuncs.com"
+
+
+def _fake_oss2_dirs(tmp):
+    nooss2 = tmp / "nooss2"
+    nooss2.mkdir()
+    (nooss2 / "oss2.py").write_text(FAKE_NOOSS2, encoding="utf-8")
+    rec = tmp / "rec"
+    rec.mkdir()
+    (rec / "oss2.py").write_text(FAKE_RECORDER, encoding="utf-8")
+    return nooss2, rec
+
+
+def _layout_with_manifest(tmp):
+    L = make_layout(tmp / "L", species=("cat", "dog"))
+    write_meta(tmp / "meta.json", {"cat": {"name": "电力猫", "rarity": "common"},
+                                   "dog": {"name": "像素狗", "rarity": "common"}})
+    (L / "manifest.json").write_text('{"version": "1"}\n', encoding="utf-8")
+    return L, tmp / "meta.json"
+
+
+def test_t23(tmp):
+    "build_manifest --url-prefix：URL == 基址 + 相对键，结构与 schema 不破坏"
+    L, meta = _layout_with_manifest(tmp)
+    r = run(tool("build_manifest"), "--src", L, "--meta", meta,
+            "--url-prefix", PFX, "--dst", tmp / "m23.json")
+    assert r.returncode == 0, r.stderr
+    m = json.loads((tmp / "m23.json").read_text(encoding="utf-8"))
+    relset = {"eggs/common.png", "eggs/rare.png", "eggs/epic.png"}
+    relset |= {f"pets/{s}/{k}.png" for s in ("cat", "dog") for k in ("1", "2", "3")}
+    relset |= {f"pets/{s}/silhouette.png" for s in ("cat", "dog")}
+    urls = [m["eggs"][rr] for rr in ("common", "rare", "epic")]
+    for sp in m["species"]:
+        urls += [sp["stages"][k] for k in ("1", "2", "3")] + [sp["silhouette"]]
+    assert len(urls) == 11, len(urls)
+    for u in urls:
+        assert u.startswith(PFX + "/") and u[len(PFX) + 1:] in relset, u
+    assert set(m) == {"version", "eggs", "species"}
+    assert {s["id"]: s["name"] for s in m["species"]} == {"cat": "电力猫", "dog": "像素狗"}
+
+
+def test_t24(tmp):
+    "--url-prefix 尾斜杠归一化，不产生 //"
+    L, meta = _layout_with_manifest(tmp)
+    outs = []
+    for pfx in (PFX, PFX + "/", PFX + "//"):
+        dst = tmp / f"m24_{len(outs)}.json"
+        r = run(tool("build_manifest"), "--src", L, "--meta", meta,
+                "--url-prefix", pfx, "--dst", dst)
+        assert r.returncode == 0, r.stderr
+        outs.append(dst.read_bytes())
+    assert outs[0] == outs[1] == outs[2], "尾斜杠必须被归一化"
+    assert "aliyuncs.com//" not in outs[0].decode("utf-8")
+
+
+def test_t25(tmp):
+    "不给 prefix 与基点旧版逐字节一致；带 prefix 可无损还原"
+    L, meta = _layout_with_manifest(tmp)
+    r = run(tool("build_manifest"), "--src", L, "--meta", meta, "--dst", tmp / "new.json")
+    assert r.returncode == 0, r.stderr
+    old = tmp / "old_bm.py"
+    old.write_bytes(
+        subprocess.run(
+            ["git", "show", "84eac60:tools/assets/build_manifest.py"],
+            cwd=str(REPO), capture_output=True, check=True).stdout
+    )
+    r = run(old, "--src", L, "--meta", meta, "--dst", tmp / "old.json")
+    assert r.returncode == 0, r.stderr
+    assert (tmp / "new.json").read_bytes() == (tmp / "old.json").read_bytes()
+    r = run(tool("build_manifest"), "--src", L, "--meta", meta,
+            "--url-prefix", PFX, "--dst", tmp / "pfx.json")
+    assert r.returncode == 0, r.stderr
+    pfx = json.loads((tmp / "pfx.json").read_text(encoding="utf-8"))
+    rel = json.loads((tmp / "new.json").read_text(encoding="utf-8"))
+    paths = [("eggs", k) for k in ("common", "rare", "epic")]
+    for i in range(len(pfx["species"])):
+        paths += [("species", i, "stages", k) for k in ("1", "2", "3")]
+        paths += [("species", i, "silhouette")]
+
+    def get(m, p):
+        for x in p:
+            m = m[x]
+        return m
+
+    for p in paths:
+        assert get(pfx, p) == PFX + "/" + get(rel, p), p
+    stripped = json.loads((tmp / "pfx.json").read_text(encoding="utf-8"))
+    for p in paths:
+        cur = stripped
+        for x in p[:-1]:
+            cur = cur[x]
+        cur[p[-1]] = cur[p[-1]][len(PFX) + 1:]
+    assert json.dumps(stripped, ensure_ascii=False, indent=2) + "\n" == (
+        tmp / "new.json").read_text(encoding="utf-8")
+
+
+def test_t26(tmp):
+    "--url-prefix 不改变校验失败语义：非零、点名、不产出"
+    L, meta = _layout_with_manifest(tmp)
+    bad = tmp / "Lbad"
+    for f in ("1.png", "3.png", "silhouette.png"):
+        d = bad / "pets" / "cat"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f).write_bytes((L / "pets" / "cat" / f).read_bytes())
+    for rr in ("common", "rare", "epic"):
+        (bad / "eggs").mkdir(parents=True, exist_ok=True)
+        (bad / "eggs" / f"{rr}.png").write_bytes((L / "eggs" / f"{rr}.png").read_bytes())
+    r = run(tool("build_manifest"), "--src", bad, "--meta", meta,
+            "--url-prefix", PFX, "--dst", bad / "manifest.json")
+    assert r.returncode == 1
+    assert "2.png" in r.stderr and "cat" in r.stderr, r.stderr
+    assert not (bad / "manifest.json").exists()
+
+
+def test_t27(tmp):
+    "mock 模式忽略 --public-read，且不打印公网 URL"
+    L, _ = _layout_with_manifest(tmp)
+    rA = run(tool("upload_oss"), "--src", L, "--mock", "--dst", tmp / "m27a")
+    rB = run(tool("upload_oss"), "--src", L, "--mock", "--dst", tmp / "m27b",
+             "--public-read")
+    assert rA.returncode == 0 and rB.returncode == 0, (rA.stderr, rB.stderr)
+    assert tree_bytes(tmp / "m27a") == tree_bytes(tmp / "m27b")
+    assert not any(line.startswith("https://") for line in rB.stdout.splitlines())
+
+
+def test_t28(tmp):
+    "真实模式 --public-read 头部契约（录制型假 oss2 离线断言）"
+    L, _ = _layout_with_manifest(tmp)
+    nooss2, rec = _fake_oss2_dirs(tmp)
+    env = dict(os.environ, OSS_ACCESS_KEY_ID="d", OSS_ACCESS_KEY_SECRET="d",
+               OSS_ENDPOINT="https://oss-cn-beijing.aliyuncs.com",
+               OSS_BUCKET="dummy-bucket", PYTHONPATH=str(rec))
+    results = {}
+    for name, extra in (("without", []), ("with", ["--public-read"])):
+        calls = tmp / f"c28_{name}.jsonl"
+        e = dict(env, FAKE_OSS2_CALLS=str(calls))
+        r = run(tool("upload_oss"), "--src", L, *extra, env=e)
+        assert r.returncode == 0, r.stderr
+        results[name] = [json.loads(line) for line in
+                         calls.read_text(encoding="utf-8").splitlines()]
+    keys = [p.relative_to(L).as_posix() for p in sorted(L.rglob("*")) if p.is_file()]
+    for rows in results.values():
+        assert [x["key"] for x in rows] == keys
+        assert [x["nbytes"] for x in rows] == [(L / k).stat().st_size for k in keys]
+    for x in results["without"]:
+        assert not x["headers"] or "x-oss-object-acl" not in x["headers"]
+    for x in results["with"]:
+        assert x["headers"] and x["headers"].get("x-oss-object-acl") == "public-read", x
+    for name in ("without", "with"):
+        txt = (tmp / f"c28_{name}.jsonl").read_text(encoding="utf-8")
+        assert "OSS_ACCESS_KEY" not in txt and "secret" not in txt.lower()
+
+
+def test_t29(tmp):
+    "真实上传完成后打印公网 URL 样例（endpoint 带或不带 scheme 均成立）"
+    L, _ = _layout_with_manifest(tmp)
+    nooss2, rec = _fake_oss2_dirs(tmp)
+    for endpoint in ("https://oss-cn-beijing.aliyuncs.com",
+                     "oss-cn-beijing.aliyuncs.com"):
+        out = tmp / "o29.txt"
+        e = dict(os.environ, OSS_ACCESS_KEY_ID="d", OSS_ACCESS_KEY_SECRET="d",
+                 OSS_ENDPOINT=endpoint, OSS_BUCKET="dummy-bucket",
+                 PYTHONPATH=str(rec),
+                 FAKE_OSS2_CALLS=str(tmp / "c29.jsonl"))
+        r = run(tool("upload_oss"), "--src", L, env=e)
+        assert r.returncode == 0, r.stderr
+        out.write_text(r.stdout, encoding="utf-8")
+        lines = r.stdout.splitlines()
+        done = [i for i, ln in enumerate(lines) if ln.startswith("上传完成")]
+        assert done, "缺少 上传完成 行"
+        uploaded = {ln.split(" ", 1)[1] for ln in lines if ln.startswith("已上传 ")}
+        samples = [ln for ln in lines[done[-1] + 1:]
+                   if ln.startswith(f"https://dummy-bucket.oss-cn-beijing.aliyuncs.com/")]
+        assert samples, f"缺少公网 URL 样例（endpoint={endpoint}）"
+        base = "https://dummy-bucket.oss-cn-beijing.aliyuncs.com"
+        for u in samples:
+            assert u.startswith(base + "/"), u
+            assert u[len(base) + 1:] in uploaded, u
+
+
+def test_t30(tmp):
+    "凭据齐全但无 oss2：非零退出、提示 oss2/pip、无任何输出产生"
+    L, _ = _layout_with_manifest(tmp)
+    nooss2, _rec = _fake_oss2_dirs(tmp)
+    cwd = tmp / "cwd30"
+    cwd.mkdir()
+    e = dict(os.environ, OSS_ACCESS_KEY_ID="d", OSS_ACCESS_KEY_SECRET="d",
+             OSS_ENDPOINT="oss-cn-beijing.aliyuncs.com",
+             OSS_BUCKET="dummy-bucket", PYTHONPATH=str(nooss2))
+    r = run(tool("upload_oss"), "--src", L, "--dst", tmp / "never30", cwd=cwd, env=e)
+    assert r.returncode != 0
+    low = r.stderr.lower()
+    assert "oss2" in low and "pip" in low, r.stderr
+    assert not list(cwd.iterdir()), "工作目录不得有输出"
+    assert not (tmp / "never30").exists()
+
+
+def test_t31(tmp):
+    "缺凭据先于 import oss2 报错（顺序不回归）；--public-read 不改变缺凭据行为"
+    L, _ = _layout_with_manifest(tmp)
+    nooss2, _rec = _fake_oss2_dirs(tmp)
+    e = {k: v for k, v in os.environ.items() if not k.startswith("OSS_")}
+    r1 = run(tool("upload_oss"), "--src", L, "--dst", tmp / "never31",
+             cwd=tmp, env=dict(e, PYTHONPATH=str(nooss2)))
+    assert r1.returncode == 1
+    assert "OSS_ACCESS_KEY_ID" in r1.stderr, r1.stderr
+    assert "oss2 未安装" not in r1.stderr, "凭据校验必须先于 import oss2"
+    r2 = run(tool("upload_oss"), "--src", L, "--public-read",
+             "--dst", tmp / "never31", cwd=tmp, env=e)
+    assert r2.returncode == 1
+    assert "凭据" in r2.stderr, r2.stderr
+    assert not (tmp / "never31").exists()
+
+
+def test_t32(tmp):
+    "凭据纪律：密钥形态零命中；README 运维手册锚点齐备且无密钥值"
+    import re
+    pats = {
+        "LTAI 形态": re.compile(r"LTAI[A-Za-z0-9]{12,}"),
+        "密钥赋值形态": re.compile(
+            r"(OSS_ACCESS_KEY_(?:ID|SECRET)|accessKey(?:Id|Secret))"
+            r"[\"' ]*[:=][\"' ]*[A-Za-z0-9]{16,}"),
+    }
+    hits = []
+    for p in (ASSETS).rglob("*"):
+        if p.is_file():
+            for n, line in enumerate(
+                    p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                for name, pat in pats.items():
+                    if pat.search(line):
+                        hits.append(f"{name} {p.name}:{n}")
+    assert not hits, hits
+    readme = (ASSETS / "README.md").read_text(encoding="utf-8")
+    for kw in ("--public-read", "--url-prefix", "__smoke__", "凭据档案", "curl",
+               "image/png", "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET",
+               "OSS_ENDPOINT", "OSS_BUCKET"):
+        assert kw in readme, f"README 缺少锚点 {kw}"
+    assert "LTAI" not in readme
+
+
+def test_t33(tmp):
+    "manifest.schema.json 相对基点 84eac60 逐字节不变"
+    r = subprocess.run(
+        ["git", "diff", "--quiet", "84eac60", "--", "tools/assets/manifest.schema.json"],
+        cwd=str(REPO), capture_output=True)
+    assert r.returncode == 0, "schema 不得变更"
+    s = json.loads((ASSETS / "manifest.schema.json").read_text(encoding="utf-8"))
+    assert set(s["required"]) == {"version", "eggs", "species"}
+    it = s["properties"]["species"]["items"]
+    assert it["required"] == ["id", "name", "rarity"]
+    assert set(it["properties"]) == {"id", "name", "rarity", "stages", "silhouette"}
+
+
 TESTS = [
     test_t1, test_t2, test_t3, test_t4, test_t5, test_t6, test_t7,
     test_t8, test_t9, test_t10, test_t11, test_t12, test_t13, test_t14,
     test_t15, test_t16, test_t17, test_t18, test_t19, test_t20, test_t21,
-    test_t22,
+    test_t22, test_t23, test_t24, test_t25, test_t26, test_t27, test_t28,
+    test_t29, test_t30, test_t31, test_t32, test_t33,
 ]
 
 
