@@ -58,5 +58,67 @@ URL 为以布局相对键结尾的字符串（可带 CDN/OSS 前缀）。完整�
 
 - [species.meta.json](species.meta.json) 是 canonical 12 物种表（PM 定稿，
   8 common / 3 rare / 1 epic），build_manifest 的 `--meta` 一律用它，不另造种类清单；
-- 测试套件：`python tools/assets/tests/run_tests.py`（22 条用例 T1–T22，
-  覆盖契约功能、边界、错误路径与物种表锚点校验，全部通过退出码 0）。
+- 测试套件：`python tools/assets/tests/run_tests.py`（33 条用例 T1–T33，
+  覆盖契约功能、边界、错误路径、物种表锚点与 OSS 真实上传离线契约，
+  全部通过退出码 0；对无 oss2 环境同样健壮）。
+
+## 真实 OSS 运维手册（laoli-storage / oss-cn-beijing）
+
+凭据纪律：AccessKey 只存在于仓库外的**凭据档案目录**（本机 `D:/AI-BBM/ecs/oss/`，
+见其中 `oss_info.md` 与配对 CSV），严禁写入仓库、PR、Issue、聊天或任何脚本字面量；
+工具只从环境变量读取，四个变量缺一不可：
+
+```
+OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_ENDPOINT / OSS_BUCKET
+# 本任务取值：OSS_ENDPOINT=https://oss-cn-beijing.aliyuncs.com，OSS_BUCKET=laoli-storage
+# （ID/SECRET 的值从凭据档案目录加载，方式见下）
+```
+
+正式上传（素材齐备后，Git Bash 在仓库根执行）：
+
+```bash
+# 0. 加载凭据到环境变量（值不回显；从凭据档案 CSV 的两列取值）
+set -a; source <凭据档案目录整理出的 env 文件>; set +a
+
+# 1. 裁切缩放：产线 cut 图（{id}-{stage}-cut_00001.png）统一裁为长边 512（同名输出）
+python tools/assets/process_assets.py --src <cut 图目录> --dst <512 输出目录>
+#    再按 {id}/{stage} 改名组装布局目录 pets/{id}/1|2|3.png；剪影用 gen_silhouette 生成；
+#    蛋素材放 eggs/{rarity}.png（canonical 12 物种 id 见 species.meta.json）
+
+# 2. 组装布局目录后，生成带公网直链的正式 manifest
+python tools/assets/build_manifest.py --src <布局根目录> \
+  --meta tools/assets/species.meta.json \
+  --url-prefix https://laoli-storage.oss-cn-beijing.aliyuncs.com \
+  --dst <布局根目录>/manifest.json
+
+# 3. 真实上传：--public-read 为 pets/、eggs/ 对象逐个设置公共读 ACL
+#   （最小授权：不改桶级读写策略；mock 模式忽略此开关）
+python tools/assets/upload_oss.py --src <布局根目录> --public-read
+# 完成后 stdout 会打印前 3 个对象的公网 URL 样例
+```
+
+公网验收与冒烟规程：
+
+```bash
+# 验收：任一对象 HTTP 200 且 Content-Type: image/png，字节与本地一致
+curl -sI "https://laoli-storage.oss-cn-beijing.aliyuncs.com/pets/cat/1.png" | grep -iE "^HTTP|^content-type"
+
+# 冒烟（首次接通新桶时）：向 __smoke__/ 前缀上传 2 张小图 + 最小 manifest，
+# curl 校验 200/image/png/字节一致后，用 oss2 delete_object 删除冒烟对象并确认 404/403。
+#
+# ⚠️ 目录形态（键 = 对象在 --src 内的相对路径）——要让键带 __smoke__/ 前缀，
+#    必须把 __smoke__/ 作为布局根下的子目录，而不是把名为 __smoke__ 的目录本身当 --src：
+#
+#   <布局根>/
+#     manifest.json          ← upload_oss 要求布局根必须有 manifest.json
+#     __smoke__/a.png        ← 键为 __smoke__/a.png
+#     __smoke__/b.png        ← 键为 __smoke__/b.png
+#
+#   误把 __smoke__ 目录本身当 --src 会让键（含 manifest.json）落到桶根。
+#
+# 冒烟命令序列：
+#   python tools/assets/upload_oss.py --src <布局根>            # 先验证私有链路（公网应 403）
+#   python tools/assets/upload_oss.py --src <布局根> --public-read
+#   curl -sI https://<bucket>.<endpoint>/__smoke__/a.png        # 期待 200 + image/png
+#   oss2 list_objects(prefix="__smoke__/") 逐个 delete_object 后复查 list 为空
+```

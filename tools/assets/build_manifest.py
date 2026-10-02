@@ -27,6 +27,12 @@ def main() -> int:
     ap.add_argument("--meta", required=True, help="种类元数据 JSON：{id: {name, rarity}}")
     ap.add_argument("--dst", required=True, help="manifest.json 输出路径")
     ap.add_argument("--version", default="1", help="manifest 版本号（默认 1）")
+    ap.add_argument(
+        "--url-prefix",
+        default=None,
+        help="公网 URL 基址（如 https://<bucket>.oss-cn-beijing.aliyuncs.com），"
+        "给出时所有 URL = 基址 + 相对键；缺省输出相对键",
+    )
     args = ap.parse_args()
     src, dst = Path(args.src), Path(args.dst)
     if not src.is_dir():
@@ -91,7 +97,25 @@ def main() -> int:
         print(f"共 {len(errors)} 处校验失败，未生成 manifest", file=sys.stderr)
         return 1
 
-    manifest = {"version": str(args.version), "eggs": eggs, "species": species}
+    prefix = args.url_prefix.rstrip("/") if args.url_prefix else None
+
+    def to_url(rel: str) -> str:
+        return f"{prefix}/{rel}" if prefix else rel
+
+    manifest = {
+        "version": str(args.version),
+        "eggs": {r: to_url(rel) for r, rel in eggs.items()},
+        "species": [
+            {
+                "id": sp["id"],
+                "name": sp["name"],
+                "rarity": sp["rarity"],
+                "stages": {k: to_url(rel) for k, rel in sp["stages"].items()},
+                "silhouette": to_url(sp["silhouette"]),
+            }
+            for sp in species
+        ],
+    }
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
