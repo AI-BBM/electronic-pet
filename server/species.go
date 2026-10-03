@@ -23,37 +23,36 @@ const (
 	rarityEpic   = "epic"
 )
 
-// 素材 URL：#10 已上传的公网直链 manifest（design/assets_output/manifest.json，version=1）
-// 现值，结构对齐 OSS 目录契约 pets/{species}/{1,2,3,silhouette}.png。
-// #14 签名 URL 版 manifest 落地后，由服务端动态下发统一替换这批常量。
-const ossBaseURL = "https://laoli-storage.oss-cn-beijing.aliyuncs.com/pets"
+// 素材 URL 源（M3 过渡态）：全部为二进制内嵌本地资源。
+// OSS 直链暂不可用（现桶 403，且黄总已定裁迁移至新桶 pet-aibbm-assets，前缀将变），
+// 故 stages 用探索稿占位循环、silhouette 用预生成剪影内嵌（见 web/static/img/pets/）。
+// #14 签名 URL 版 manifest 落地后，仅替换本节两个函数为动态下发实现（键约定 pets/{id}/{1|2|3|silhouette}.png 不变）。
 
-func ossStageURL(id string, stage int) string {
-	return fmt.Sprintf("%s/%s/%d.png", ossBaseURL, id, stage)
+// placeholderArt 是 M1 探索稿占位立绘（内嵌，恒可用）。
+var placeholderArt = []string{"/img/pets/robotcat.png", "/img/pets/pixeldog.png", "/img/pets/bunny.png"}
+
+// placeholderStages 返回第 i 个物种的三阶段占位（轮转，Lv1 图与 M1 一致）。
+func placeholderStages(i int) []string {
+	return []string{placeholderArt[i%3], placeholderArt[(i+1)%3], placeholderArt[(i+2)%3]}
 }
 
-func ossSilhouetteURL(id string) string {
-	return fmt.Sprintf("%s/%s/silhouette.png", ossBaseURL, id)
-}
-
-// stages3 生成某物种的三阶段直链（manifest 结构占位）。
-func stages3(id string) []string {
-	return []string{ossStageURL(id, 1), ossStageURL(id, 2), ossStageURL(id, 3)}
+func silhouetteURL(id string) string {
+	return "/img/pets/" + id + "/silhouette.png"
 }
 
 var speciesList = []speciesInfo{
-	{"cat", "电力猫", rarityCommon, stages3("cat"), ossSilhouetteURL("cat")},
-	{"dog", "像素狗", rarityCommon, stages3("dog"), ossSilhouetteURL("dog")},
-	{"bunny", "云绒兔", rarityCommon, stages3("bunny"), ossSilhouetteURL("bunny")},
-	{"hamster", "芯片仓鼠", rarityCommon, stages3("hamster"), ossSilhouetteURL("hamster")},
-	{"chick", "蛋壳鸡", rarityCommon, stages3("chick"), ossSilhouetteURL("chick")},
-	{"penguin", "冰川企鹅", rarityCommon, stages3("penguin"), ossSilhouetteURL("penguin")},
-	{"koala", "电池考拉", rarityCommon, stages3("koala"), ossSilhouetteURL("koala")},
-	{"axolotl", "六角恐龙", rarityCommon, stages3("axolotl"), ossSilhouetteURL("axolotl")},
-	{"fox", "星辰狐", rarityRare, stages3("fox"), ossSilhouetteURL("fox")},
-	{"panda", "太极熊猫", rarityRare, stages3("panda"), ossSilhouetteURL("panda")},
-	{"dino", "机械恐龙", rarityRare, stages3("dino"), ossSilhouetteURL("dino")},
-	{"dragon", "神威小龙", rarityEpic, stages3("dragon"), ossSilhouetteURL("dragon")},
+	{"cat", "电力猫", rarityCommon, placeholderStages(0), silhouetteURL("cat")},
+	{"dog", "像素狗", rarityCommon, placeholderStages(1), silhouetteURL("dog")},
+	{"bunny", "云绒兔", rarityCommon, placeholderStages(2), silhouetteURL("bunny")},
+	{"hamster", "芯片仓鼠", rarityCommon, placeholderStages(3), silhouetteURL("hamster")},
+	{"chick", "蛋壳鸡", rarityCommon, placeholderStages(4), silhouetteURL("chick")},
+	{"penguin", "冰川企鹅", rarityCommon, placeholderStages(5), silhouetteURL("penguin")},
+	{"koala", "电池考拉", rarityCommon, placeholderStages(6), silhouetteURL("koala")},
+	{"axolotl", "六角恐龙", rarityCommon, placeholderStages(7), silhouetteURL("axolotl")},
+	{"fox", "星辰狐", rarityRare, placeholderStages(8), silhouetteURL("fox")},
+	{"panda", "太极熊猫", rarityRare, placeholderStages(9), silhouetteURL("panda")},
+	{"dino", "机械恐龙", rarityRare, placeholderStages(10), silhouetteURL("dino")},
+	{"dragon", "神威小龙", rarityEpic, placeholderStages(11), silhouetteURL("dragon")},
 }
 
 // 稀有度权重：普通 70% / 稀有 25% / 史诗 5%（PRD M1）。

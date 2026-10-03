@@ -44,16 +44,15 @@ func (s *srv) handleWall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 最新流水经 MAX(id) 关联：id 单调递增，避免 created_at 同秒并列。
+	// 最新流水用相关子查询按 pet 取（idx_point_logs_pet 支撑，天然限定本班宠物行），
+	// id 单调递增，规避 created_at 同秒并列。
 	const query = `
 SELECT p.id, p.name, p.level, p.points, p.species_id, st.name,
-       pl.reason, pl.created_at
+       (SELECT reason FROM point_logs WHERE pet_id = p.id ORDER BY id DESC LIMIT 1),
+       (SELECT created_at FROM point_logs WHERE pet_id = p.id ORDER BY id DESC LIMIT 1),
+       (SELECT MAX(id) FROM point_logs WHERE pet_id = p.id)
 FROM pets p
 JOIN students st ON p.student_id = st.id
-LEFT JOIN (
-	SELECT pet_id, MAX(id) AS last_id FROM point_logs GROUP BY pet_id
-) l ON l.pet_id = p.id
-LEFT JOIN point_logs pl ON pl.id = l.last_id
 WHERE st.class_id = ?
 ORDER BY `
 
@@ -62,7 +61,8 @@ ORDER BY `
 		orderBy = "p.points DESC, p.id ASC"
 	} else {
 		// SQLite 中 NULL 最小：(last_id IS NULL) 升序把无流水者排到最后
-		orderBy = "l.last_id IS NULL ASC, l.last_id DESC, p.id ASC"
+		orderBy = "(SELECT MAX(id) FROM point_logs WHERE pet_id = p.id) IS NULL ASC," +
+			" (SELECT MAX(id) FROM point_logs WHERE pet_id = p.id) DESC, p.id ASC"
 	}
 
 	rows, err := s.db.Query(query+orderBy, classID)
@@ -79,8 +79,9 @@ ORDER BY `
 			speciesID string
 			reason    sql.NullString
 			activity  sql.NullString
+			lastID    sql.NullInt64
 		)
-		if err := rows.Scan(&e.PetID, &e.PetName, &e.Level, &e.Points, &speciesID, &e.StudentName, &reason, &activity); err != nil {
+		if err := rows.Scan(&e.PetID, &e.PetName, &e.Level, &e.Points, &speciesID, &e.StudentName, &reason, &activity, &lastID); err != nil {
 			writeInternal(w, err, "scan wall")
 			return
 		}
