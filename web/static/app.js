@@ -197,6 +197,51 @@
     });
   });
 
+  /* ---------- 加分喂养（M2 已上线，#21 接线） ---------- */
+  $("#add-points-btn").addEventListener("click", function () {
+    var form = $("#points-form");
+    form.hidden = !form.hidden;
+    showError("#points-msg", null);
+  });
+
+  $("#points-reason").addEventListener("change", function () {
+    $("#points-custom").hidden = $("#points-reason").value !== "__custom__";
+  });
+
+  $("#points-cancel").addEventListener("click", function () {
+    $("#points-form").hidden = true;
+    showError("#points-msg", null);
+  });
+
+  $("#points-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var reason = $("#points-reason").value === "__custom__"
+      ? $("#points-custom").value.trim()
+      : $("#points-reason").value;
+    var value = parseInt($("#points-value").value, 10);
+    if (!reason) {
+      showError("#points-msg", "请填写加分理由");
+      return;
+    }
+    // requestId 幂等：双击/重试不会重复计分
+    var requestId = "p-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+    api("POST", "/api/points", { reason: reason, value: value, requestId: requestId }).then(function (r) {
+      if (r.status !== 200) {
+        showError("#points-msg", r.data.error || "加分失败，请重试");
+        return;
+      }
+      if (!r.data.added) {
+        showError("#points-msg", "重复提交已忽略");
+        return;
+      }
+      renderPet(r.data.pet);
+      if (r.data.levelUp) {
+        Points.playLevelUp(document.querySelector(".pet-card"), r.data.level);
+      }
+      $("#points-form").hidden = true;
+    });
+  });
+
   /* ---------- 宠物图鉴（M3） ---------- */
   function loadDex() {
     api("GET", "/api/dex").then(function (r) {

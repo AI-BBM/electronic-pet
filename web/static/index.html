@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=1280">
 <title>电子宠物 · 班级激励</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/css/points.css">
 </head>
 <body>
 <div id="app">
@@ -69,8 +70,28 @@
           <div class="progress"><div id="pet-progress" class="progress-bar"></div></div>
           <span id="pet-points" class="points"></span>
         </div>
-        <button class="btn primary" id="add-points-btn" disabled title="M2 即将开放">＋ 加分喂养</button>
-        <p class="hint">加分喂养将在 M2 上线，先把小伙伴领回家吧～</p>
+        <button class="btn primary" id="add-points-btn">＋ 加分喂养</button>
+        <form id="points-form" class="hint" hidden>
+          <label>理由
+            <select id="points-reason">
+              <option>作业优秀</option>
+              <option>课堂表现</option>
+              <option>劳动卫生</option>
+              <option>进步之星</option>
+              <option value="__custom__">自定义…</option>
+            </select>
+          </label>
+          <input id="points-custom" placeholder="自定义理由（选填）" maxlength="100" hidden>
+          <label>分值
+            <select id="points-value">
+              <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+              <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+            </select>
+          </label>
+          <button type="submit" class="btn tiny primary">确认加分</button>
+          <button type="button" id="points-cancel" class="btn tiny ghost">取消</button>
+          <span id="points-msg" class="err" hidden></span>
+        </form>
         <div class="row nav-row">
           <button id="open-dex" class="btn ghost">📖 宠物图鉴</button>
           <button id="open-wall" class="btn ghost">🏫 班级墙</button>
@@ -108,6 +129,7 @@
   </section>
 
 </div>
+<script src="/js/points.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
