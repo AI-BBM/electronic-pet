@@ -62,7 +62,7 @@ URL 为以布局相对键结尾的字符串（可带 CDN/OSS 前缀）。完整�
   覆盖契约功能、边界、错误路径、物种表锚点与 OSS 真实上传离线契约，
   全部通过退出码 0；对无 oss2 环境同样健壮）。
 
-## 真实 OSS 运维手册（laoli-storage / oss-cn-beijing）
+## 真实 OSS 运维手册（pet-aibbm-assets / oss-cn-hangzhou，课淘账号宠物专用公共读桶）
 
 凭据纪律：AccessKey 只存在于仓库外的**凭据档案目录**（本机 `D:/AI-BBM/ecs/oss/`，
 见其中 `oss_info.md` 与配对 CSV），严禁写入仓库、PR、Issue、聊天或任何脚本字面量；
@@ -70,7 +70,7 @@ URL 为以布局相对键结尾的字符串（可带 CDN/OSS 前缀）。完整�
 
 ```
 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_ENDPOINT / OSS_BUCKET
-# 本任务取值：OSS_ENDPOINT=https://oss-cn-beijing.aliyuncs.com，OSS_BUCKET=laoli-storage
+# 本任务取值：OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com，OSS_BUCKET=pet-aibbm-assets
 # （ID/SECRET 的值从凭据档案目录加载，方式见下）
 ```
 
@@ -88,7 +88,7 @@ python tools/assets/process_assets.py --src <cut 图目录> --dst <512 输出目
 # 2. 组装布局目录后，生成带公网直链的正式 manifest
 python tools/assets/build_manifest.py --src <布局根目录> \
   --meta tools/assets/species.meta.json \
-  --url-prefix https://laoli-storage.oss-cn-beijing.aliyuncs.com \
+  --url-prefix https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com \
   --dst <布局根目录>/manifest.json
 
 # 3. 真实上传：--public-read 为 pets/、eggs/ 对象逐个设置公共读 ACL
@@ -101,7 +101,7 @@ python tools/assets/upload_oss.py --src <布局根目录> --public-read
 
 ```bash
 # 验收：任一对象 HTTP 200 且 Content-Type: image/png，字节与本地一致
-curl -sI "https://laoli-storage.oss-cn-beijing.aliyuncs.com/pets/cat/1.png" | grep -iE "^HTTP|^content-type"
+curl -sI "https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/cat/1.png" | grep -iE "^HTTP|^content-type"
 
 # 冒烟（首次接通新桶时）：向 __smoke__/ 前缀上传 2 张小图 + 最小 manifest，
 # curl 校验 200/image/png/字节一致后，用 oss2 delete_object 删除冒烟对象并确认 404/403。
