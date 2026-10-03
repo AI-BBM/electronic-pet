@@ -5,6 +5,8 @@ package server_test
 // 命名统一加 m2 前缀避免与 M1 helper 冲突。
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/AI-BBM/electronic-pet/server"
@@ -116,17 +119,29 @@ func m2NewHandlerWithLevels(t *testing.T, lv2, lv3 int) http.Handler {
 	return newHandler(t)
 }
 
-// m2TamperToken 把合法 token 末位替换成另一个字符，制造篡改 token。
+// m2TamperToken 把合法 token 末位替换成非 base64 字符，制造必然解码失败的篡改 token。
+// 注意不能用字母表内字符：RawURLEncoding 43 字符签名末位仅 4 个有效位，
+// A/B/C/D 互相替换解码结果相同（对抗审查发现的 flaky 根因，见 TestTamperTokenChangesDecoding）。
 func m2TamperToken(token string) string {
 	if token == "" {
 		return "x"
 	}
-	last := token[len(token)-1]
-	replacement := byte('A')
-	if last == 'A' {
-		replacement = 'B'
+	return token[:len(token)-1] + "!"
+}
+
+// TestTamperTokenChangesDecoding 钉死 m2TamperToken 的契约：篡改后的 token 必须解码不同
+// （否则"篡改"是无操作，消费方拿到的仍是合法 token，401 断言随机翻车）。
+// 命令: go test ./server/ -run TestTamperTokenChangesDecoding -v
+func TestTamperTokenChangesDecoding(t *testing.T) {
+	sig := strings.Repeat("A", 42) + "B" // 末位 A↔B 在旧实现下同解码（缺陷根因）
+	tok := base64.RawURLEncoding.EncodeToString([]byte("1.x")) + "." + sig
+	tp := m2TamperToken(tok)
+
+	a, errA := base64.RawURLEncoding.DecodeString(sig)
+	b, errB := base64.RawURLEncoding.DecodeString(tp[len(tp)-len(sig):])
+	if errA == nil && errB == nil && bytes.Equal(a, b) {
+		t.Fatalf("m2TamperToken 产生了同解码的无效篡改: %q -> %q", tok, tp)
 	}
-	return token[:len(token)-1] + string(replacement)
 }
 
 // m2Status 发送任意方法/路径的请求，仅返回状态码（body 带 JSON 时自动携带）。

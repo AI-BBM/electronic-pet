@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io/fs"
 	"net/http"
 	"os"
@@ -14,7 +15,10 @@ import (
 
 type ctxKey int
 
-const ctxKeyStudent ctxKey = iota
+const (
+	ctxKeyStudent ctxKey = iota // int64 studentID
+	ctxKeyTeacher               // int64 classID
+)
 
 type srv struct {
 	db          *sql.DB
@@ -89,6 +93,23 @@ func (s *srv) routes() http.Handler {
 		mux.HandleFunc(m+" /api/class/wall", s.methodNotAllowed(http.MethodGet))
 	}
 
+	// M4 教师端。登录口免鉴权；其余教师端点走 requireTeacher（角色隔离，学生 token 403）。
+	mux.HandleFunc("POST /api/teacher/login", s.handleTeacherLogin)
+	taught := s.requireTeacher
+	mux.Handle("POST /api/teacher/adopt", taught(http.HandlerFunc(s.handleTeacherAdopt)))
+	mux.Handle("POST /api/teacher/points", taught(http.HandlerFunc(s.handleTeacherPoints)))
+	mux.Handle("GET /api/teacher/roster", taught(http.HandlerFunc(s.handleTeacherRoster)))
+	mux.Handle("POST /api/teacher/passcode", taught(http.HandlerFunc(s.handleTeacherPasscode)))
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		mux.HandleFunc(m+" /api/teacher/adopt", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/points", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/passcode", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/login", s.methodNotAllowed(http.MethodPost))
+	}
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		mux.HandleFunc(m+" /api/teacher/roster", s.methodNotAllowed(http.MethodGet))
+	}
+
 	mux.Handle("GET /", s.staticHandler())
 	return mux
 }
@@ -101,16 +122,46 @@ func (s *srv) methodNotAllowed(allow string) http.HandlerFunc {
 	}
 }
 
-// requireStudent 校验 Bearer token，把 studentID 注入 context。
-func (s *srv) requireStudent(next http.Handler) http.Handler {
+// requireAuth 解析 Bearer token 并校验角色；角色不符 403，token 无效 401。
+func (s *srv) requireAuth(role string, next func(w http.ResponseWriter, r *http.Request, id int64)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		studentID, err := verifyToken(s.tokenSecret, token)
+		var (
+			id  int64
+			err error
+		)
+		if role == roleTeacher {
+			id, err = verifyTeacherToken(s.tokenSecret, token)
+		} else {
+			id, err = verifyToken(s.tokenSecret, token)
+		}
 		if err != nil {
+			if errors.Is(err, errWrongRole) {
+				writeJSON(w, http.StatusForbidden, errJSON("角色无权访问该端点"))
+				return
+			}
 			writeJSON(w, http.StatusUnauthorized, errJSON("未登录或 token 无效"))
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyStudent, studentID)))
+		key := ctxKeyStudent
+		if role == roleTeacher {
+			key = ctxKeyTeacher
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), key, id)), id)
+	})
+}
+
+// requireStudent 校验学生 Bearer token，把 studentID 注入 context。
+func (s *srv) requireStudent(next http.Handler) http.Handler {
+	return s.requireAuth(roleStudent, func(w http.ResponseWriter, r *http.Request, _ int64) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireTeacher 校验教师 Bearer token，把 classID 注入 context（M4 角色隔离）。
+func (s *srv) requireTeacher(next http.Handler) http.Handler {
+	return s.requireAuth(roleTeacher, func(w http.ResponseWriter, r *http.Request, _ int64) {
+		next.ServeHTTP(w, r)
 	})
 }
 

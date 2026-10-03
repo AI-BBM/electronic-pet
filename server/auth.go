@@ -36,13 +36,39 @@ func loadOrCreateTokenSecret(db *sql.DB) (string, error) {
 	return secret, nil
 }
 
+// 角色常量：学生 token payload "<studentID>.<nonce>"；教师 token payload
+// "T<classID>.<nonce>"（M4 角色位，学生 token 格式不变，旧 token 继续有效）。
+const (
+	roleStudent = "student"
+	roleTeacher = "teacher"
+)
+
+// principal 是 token 解析出的主体：学生（id=studentID）或教师（id=所属班级 id）。
+type principal struct {
+	role string
+	id   int64
+}
+
 func signToken(secret string, studentID int64) string {
-	// 随机 nonce 保证每次 join 都签发不同 token（Windows 计时器粒度不可靠）
+	return signPrincipalToken(secret, principal{role: roleStudent, id: studentID})
+}
+
+// signTeacherToken 为班级签发教师 token（id 为 classID）。
+func signTeacherToken(secret string, classID int64) string {
+	return signPrincipalToken(secret, principal{role: roleTeacher, id: classID})
+}
+
+func signPrincipalToken(secret string, p principal) string {
+	// 随机 nonce 保证每次登录都签发不同 token（Windows 计时器粒度不可靠）
 	nonce := make([]byte, 8)
 	if _, err := rand.Read(nonce); err != nil {
 		panic("crypto/rand unavailable: " + err.Error())
 	}
-	payload := strconv.FormatInt(studentID, 10) + "." + base64.RawURLEncoding.EncodeToString(nonce)
+	idPart := strconv.FormatInt(p.id, 10)
+	if p.role == roleTeacher {
+		idPart = "T" + idPart
+	}
+	payload := idPart + "." + base64.RawURLEncoding.EncodeToString(nonce)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
 	sig := mac.Sum(nil)
@@ -50,34 +76,65 @@ func signToken(secret string, studentID int64) string {
 		"." + base64.RawURLEncoding.EncodeToString(sig)
 }
 
-var errBadToken = errors.New("invalid token")
+var (
+	errBadToken  = errors.New("invalid token")
+	errWrongRole = errors.New("wrong role")
+)
 
-// verifyToken 校验签名并返回 studentID。
+// verifyToken 校验学生 token 并返回 studentID；教师 token 角色不符返回 errWrongRole。
 func verifyToken(secret, token string) (int64, error) {
+	p, err := verifyPrincipal(secret, token)
+	if err != nil {
+		return 0, err
+	}
+	if p.role != roleStudent {
+		return 0, errWrongRole
+	}
+	return p.id, nil
+}
+
+// verifyTeacherToken 校验教师 token 并返回班级 id；学生 token 角色不符返回 errWrongRole。
+func verifyTeacherToken(secret, token string) (int64, error) {
+	p, err := verifyPrincipal(secret, token)
+	if err != nil {
+		return 0, err
+	}
+	if p.role != roleTeacher {
+		return 0, errWrongRole
+	}
+	return p.id, nil
+}
+
+func verifyPrincipal(secret, token string) (principal, error) {
 	payloadB64, sigB64, ok := strings.Cut(token, ".")
 	if !ok {
-		return 0, errBadToken
+		return principal{}, errBadToken
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(payloadB64)
 	if err != nil {
-		return 0, errBadToken
+		return principal{}, errBadToken
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(sigB64)
 	if err != nil {
-		return 0, errBadToken
+		return principal{}, errBadToken
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(payload)
 	if !hmac.Equal(sig, mac.Sum(nil)) {
-		return 0, errBadToken
+		return principal{}, errBadToken
 	}
 	idStr, _, ok := strings.Cut(string(payload), ".")
 	if !ok {
-		return 0, errBadToken
+		return principal{}, errBadToken
 	}
-	studentID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || studentID <= 0 {
-		return 0, errBadToken
+	role := roleStudent
+	if strings.HasPrefix(idStr, "T") {
+		role = roleTeacher
+		idStr = strings.TrimPrefix(idStr, "T")
 	}
-	return studentID, nil
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		return principal{}, errBadToken
+	}
+	return principal{role: role, id: id}, nil
 }

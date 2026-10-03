@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>教师工作台 · 电子宠物</title>
+  <style>
+    body { font-family: system-ui, "Microsoft YaHei", sans-serif; max-width: 960px; margin: 24px auto; padding: 0 16px; color: #243244; }
+    h1 { font-size: 20px; }
+    .card { border: 1px solid #dfe5ec; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    input, button { padding: 6px 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid #dfe5ec; padding: 8px 6px; text-align: left; }
+    .muted { color: #8a97a6; }
+    .ok { color: #2e9e5b; }
+    .err { color: #b00; font-size: 13px; }
+    .ops button { margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <h1>教师工作台</h1>
+
+  <!-- 登录视图 -->
+  <div class="card" id="login-view">
+    <p>班级码：<input id="class-code" placeholder="如 C101"></p>
+    <p>教师密码：<input id="passcode" type="password" placeholder="首次请向管理员获取"></p>
+    <button id="btn-login">登录</button>
+    <span id="login-msg" class="err"></span>
+  </div>
+
+  <!-- 工作台视图 -->
+  <div id="work-view" style="display:none">
+    <div class="card">
+      <h2>班级花名册</h2>
+      <button id="btn-refresh">刷新</button>
+      <span id="work-msg" class="err"></span>
+      <table>
+        <thead>
+          <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>最近加分</th><th>操作</th></tr>
+        </thead>
+        <tbody id="roster"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>修改教师密码</h2>
+      <p>旧密码：<input id="old-pass" type="password"> 新密码：<input id="new-pass" type="password">
+        <button id="btn-pass">修改</button> <span id="pass-msg" class="err"></span></p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      var $ = function (id) { return document.getElementById(id); };
+      var TOKEN_KEY = 'teacher_token';
+
+      function api(method, path, body, needsAuth) {
+        var headers = { 'Content-Type': 'application/json' };
+        if (needsAuth) headers['Authorization'] = 'Bearer ' + localStorage.getItem(TOKEN_KEY);
+        return fetch(path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
+          .then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+              if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+              return data;
+            });
+          });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      $('btn-login').onclick = function () {
+        $('login-msg').textContent = '';
+        api('POST', '/api/teacher/login', { classCode: $('class-code').value.trim(), teacherPasscode: $('passcode').value }, false)
+          .then(function (data) {
+            localStorage.setItem(TOKEN_KEY, data.token);
+            showWork();
+          })
+          .catch(function (e) { $('login-msg').textContent = e.message; });
+      };
+
+      function escapeHtmlRow(no, name) { return escapeHtml(no) + '" data-no="' + escapeHtml(no) + '" data-name="' + escapeHtml(name); }
+
+      function loadRoster() {
+        api('GET', '/api/teacher/roster', null, true).then(function (data) {
+          $('roster').innerHTML = data.students.map(function (s) {
+            var pet = s.adopted
+              ? escapeHtml(s.speciesName) + '（' + escapeHtml(s.speciesId) + '）'
+              : '<span class="muted">未领养</span>';
+            var last = s.lastPointsAt || '—';
+            return '<tr data-no="' + escapeHtml(s.studentNo) + '">' +
+              '<td>' + escapeHtml(s.studentNo) + '</td>' +
+              '<td>' + escapeHtml(s.name) + '</td>' +
+              '<td>' + pet + '</td>' +
+              '<td>' + (s.adopted ? 'Lv' + s.level : '—') + '</td>' +
+              '<td>' + (s.adopted ? s.points : '—') + '</td>' +
+              '<td class="muted">' + escapeHtml(last) + '</td>' +
+              '<td class="ops">' +
+              (s.adopted
+                ? '<button class="do-points">加分</button>'
+                : '<button class="do-adopt">发宠物</button>') +
+              '</td></tr>';
+          }).join('');
+        }).catch(function (e) { $('work-msg').textContent = e.message; });
+      }
+
+      // 行内操作：发宠物 / 加分（加分理由走预设+自定义弹窗，MVP 用 prompt）
+      $('roster').addEventListener('click', function (ev) {
+        var tr = ev.target.closest('tr');
+        if (!tr) return;
+        var no = tr.getAttribute('data-no');
+        if (ev.target.classList.contains('do-adopt')) {
+          api('POST', '/api/teacher/adopt', { studentNo: no }, true)
+            .then(function () { $('work-msg').textContent = ''; loadRoster(); })
+            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
+        } else if (ev.target.classList.contains('do-points')) {
+          var reason = window.prompt('加分理由：');
+          if (!reason) return;
+          var value = parseInt(window.prompt('分值（1-50）：', '1'), 10);
+          if (!value) return;
+          var requestId = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+          api('POST', '/api/teacher/points', { studentNo: no, reason: reason, value: value, requestId: requestId }, true)
+            .then(function (r) {
+              $('work-msg').textContent = '';
+              window.alert(r.levelUp ? '加分成功，触发进化！Lv' + r.level : '加分成功（+' + value + '）');
+              loadRoster();
+            })
+            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
+        }
+      });
+
+      $('btn-refresh').onclick = loadRoster;
+
+      $('btn-pass').onclick = function () {
+        $('pass-msg').textContent = '';
+        api('POST', '/api/teacher/passcode',
+          { oldPasscode: $('old-pass').value, newPasscode: $('new-pass').value }, true)
+          .then(function () {
+            $('old-pass').value = ''; $('new-pass').value = '';
+            $('pass-msg').className = 'ok'; $('pass-msg').textContent = '已修改';
+          })
+          .catch(function (e) { $('pass-msg').className = 'err'; $('pass-msg').textContent = e.message; });
+      };
+
+      function showWork() {
+        $('login-view').style.display = 'none';
+        $('work-view').style.display = '';
+        loadRoster();
+      }
+
+      if (localStorage.getItem(TOKEN_KEY)) showWork();
+    })();
+  </script>
+</body>
+</html>

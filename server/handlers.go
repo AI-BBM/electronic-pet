@@ -78,7 +78,10 @@ func (s *srv) handleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`INSERT INTO classes(code) VALUES(?) ON CONFLICT(code) DO NOTHING`, req.ClassCode); err != nil {
+	if _, err := tx.Exec(
+		`INSERT INTO classes(code, teacher_passcode) VALUES(?, ?) ON CONFLICT(code) DO NOTHING`,
+		req.ClassCode, generatePasscode(),
+	); err != nil {
 		writeInternal(w, err, "upsert class")
 		return
 	}
