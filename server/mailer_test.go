@@ -184,9 +184,8 @@ func runFakeSMTPSession(rw net.Conn, rec *fakeSMTPRecorder) {
 }
 
 func mustWrite(w io.Writer, s string) {
-	if _, err := io.WriteString(w, s); err != nil {
-		panic(err)
-	}
+	// 尽力而为：会话被弃（测试提前结束/防护先行拒绝）时对端已关闭，写失败属正常。
+	_, _ = io.WriteString(w, s)
 }
 
 // readDotPayload 原始收集 DATA 载荷至独占一行的 "."（本套正文无前导点，免去
@@ -316,6 +315,69 @@ func TestMailer_SMTP_DialErrorPropagates(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "dial boom") {
 		t.Fatalf("错误应保留根因，实际 %v", err)
+	}
+}
+
+// T11 对抗审查补用例：Dial 返回已完成 Hello 的 client（真实 dialSMTP STARTTLS
+// 分支的状态）时，Send 不得重复 Hello（net/smtp didHello 幂护栏会报
+// "Hello called after other methods"）。
+// 命令： go test ./server -run '^TestMailer_SMTP_DialAlreadyHelloed$' -count=1 -v
+func TestMailer_SMTP_DialAlreadyHelloed(t *testing.T) {
+	rec := &fakeSMTPRecorder{}
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() { serverConn.Close(); clientConn.Close() })
+	go func() {
+		defer serverConn.Close()
+		runFakeSMTPSession(serverConn, rec)
+	}()
+	m := server.NewSMTPMailer("smtp.example.com", 587, "u", "p", "noreply@example.com")
+	m.Dial = func(string, bool) (*smtp.Client, error) {
+		// 忠实模拟 dialSMTP 非 465 分支：返回前已完成 Hello（含 EHLO 应答交换）。
+		cli, err := smtp.NewClient(clientConn, "localhost")
+		if err != nil {
+			return nil, err
+		}
+		if err := cli.Hello("localhost"); err != nil {
+			return nil, err
+		}
+		return cli, nil
+	}
+	if err := m.SendVerificationCode("to@test.cn", "123456"); err != nil {
+		t.Fatalf("对已 Hello 的会话应正常发信，实际 %v", err)
+	}
+	if rec.mailFrom != "MAIL FROM:<noreply@example.com>" {
+		t.Fatalf("应收到完整信封，实际 %q", rec.mailFrom)
+	}
+}
+
+// T12 头注入防护（钉死）：email/from 含 CR/LF 必须被显式拒绝，不得进入会话。
+// 命令： go test ./server -run '^TestMailer_HeaderInjectionRejected$' -v
+func TestMailer_HeaderInjectionRejected(t *testing.T) {
+	cases := []struct {
+		name  string
+		email string
+		from  string
+	}{
+		{"email 夹带换行", "to@test.cn\r\nBcc: victim@example.com", "noreply@example.com"},
+		{"from 夹带换行", "to@test.cn", "noreply@example.com\r\nX-Evil: 1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dial, rec := newFakeSMTP(t)
+			m := server.NewSMTPMailer("smtp.example.com", 465, "u", "p", tc.from)
+			m.Dial = dial
+			err := m.SendVerificationCode(tc.email, "999999")
+			if err == nil {
+				t.Fatal("含换行的地址应被拒绝")
+			}
+			if len(rec.addrs) != 0 {
+				t.Fatalf("防护应在 Dial 前拒绝（零会话），实际 %v", rec.addrs)
+			}
+			if rec.mailFrom != "" || rec.rcptTo != "" || len(rec.dataLines) != 0 {
+				t.Fatalf("拒绝前不应发出任何信封/正文，实际 mail=%q rcpt=%q data=%d 行",
+					rec.mailFrom, rec.rcptTo, len(rec.dataLines))
+			}
+		})
 	}
 }
 

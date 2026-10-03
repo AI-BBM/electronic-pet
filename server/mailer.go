@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -76,7 +77,12 @@ func NewSMTPMailer(host string, port int, username, password, from string) *SMTP
 // SendVerificationCode 向 email 发送含 code 的验证码邮件。
 // 加密由 Dial 契约保证：默认实现 465 走隐式 TLS，其余端口强制 STARTTLS（未通告
 // 即拒绝，绝不明文发凭据）；注入的自定义 Dial 视同已提供加密会话。
+// Hello 单一归属：默认 dialSMTP 的 STARTTLS 分支已 Hello，其余路径靠 net/smtp
+// 惰性 hello（localName 默认 localhost），此处不得再显式调用。
 func (m *SMTPMailer) SendVerificationCode(email, code string) error {
+	if strings.ContainsAny(email, "\r\n") || strings.ContainsAny(m.From, "\r\n") {
+		return errors.New("mailer: email/from 含换行符，拒绝疑似头注入的地址")
+	}
 	implicit := m.Port == 465
 	dial := m.Dial
 	if dial == nil {
@@ -88,9 +94,6 @@ func (m *SMTPMailer) SendVerificationCode(email, code string) error {
 	}
 	defer cli.Close()
 
-	if err := cli.Hello("localhost"); err != nil {
-		return fmt.Errorf("mailer: hello: %w", err)
-	}
 	if err := cli.Auth(tlsPlainAuth{username: m.Username, password: m.Password}); err != nil {
 		return fmt.Errorf("mailer: auth: %w", err)
 	}
@@ -114,9 +117,10 @@ func (m *SMTPMailer) SendVerificationCode(email, code string) error {
 	return cli.Quit()
 }
 
-// SendVerificationCode 降级实现：验证码写标准日志（与 #25 未配置行为一致）。
+// SendVerificationCode 降级实现：验证码写标准日志（口径与 #25 M6 钉死一致：
+// 前缀 [mock-mail]），服务保持可用。
 func (m *MockMailer) SendVerificationCode(email, code string) error {
-	log.Printf("[mailer:mock] SMTP 未配置，验证码未真实发送 email=%s code=%s", email, code)
+	log.Printf("[mock-mail] to=%s code=%s", email, code)
 	return nil
 }
 
