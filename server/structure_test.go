@@ -21,7 +21,7 @@ func TestStructure_ImplementationFilesExist(t *testing.T) {
 	for _, name := range []string{
 		"server/points.go",
 		"server/levels.go",
-		"web/log.html",
+		"web/static/log.html", // #23：由 web/log.html 移入 static/（原位置在 embed 范围外，页面不可达）
 		"web/static/js/points.js",
 		"web/static/css/points.css",
 	} {

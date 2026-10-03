@@ -128,6 +128,46 @@ h2 { font-size: 26px; margin-bottom: 6px; }
 .rarity-rare { background: #e8f9f1; color: #1b9e77; }
 .rarity-epic { background: #fdeaf6; color: #c2419b; }
 
+/* ---------- M5 移动端适配：≥1024px 保持桌面布局，<1024px 单列自适应 ---------- */
+@media (max-width: 1023px) {
+  body { align-items: flex-start; }
+  #app { padding: 16px 12px 32px; }
+
+  /* 卡片全宽单列 */
+  .card { width: 100%; padding: 24px 18px; border-radius: 18px; }
+  .wide-card { width: 100%; }
+
+  /* 我的宠物：横排转纵排，立绘最大约 60vw */
+  .pet-card { flex-direction: column; gap: 18px; text-align: center; }
+  .pet-stage img { max-width: 60vw; margin: 0 auto; }
+  .pet-info { width: 100%; }
+  .pet-title, .level-row { justify-content: center; }
+
+  /* 领蛋页：两列蛋架，蛋图不缩太小 */
+  .egg-rack { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .egg { width: 88px; height: 110px; }
+
+  /* 孵化过场 */
+  .hatch-card { width: 100%; min-height: 380px; }
+  .hatch-reveal img { width: 60vw; max-width: 420px; }
+
+  /* 图鉴与班级墙 */
+  .dex-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .wall-item { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .wall-meta { min-width: 0; flex: 1 1 160px; }
+  .wall-meta .s { word-break: break-all; }
+
+  /* 触屏友好：可点目标 ≥44px、表单字号 ≥16px（防 iOS 聚焦缩放） */
+  .btn { min-height: 44px; }
+  .btn.tiny { min-height: 44px; padding: 8px 16px; }
+  .egg, .wall-item { min-height: 44px; }
+  .join-card input, select, #points-custom { min-height: 44px; font-size: 16px; }
+  .join-card input { height: 46px; }
+
+  /* 加分表单在窄屏铺满 */
+  #points-form select, #points-form input { width: 100%; max-width: 100%; box-sizing: border-box; }
+}
+
 /* 图鉴与班级墙（M3） */
 .nav-row { margin-top: 16px; }
 .wide-card { width: 920px; text-align: left; }
