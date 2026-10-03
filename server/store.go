@@ -38,9 +38,10 @@ CREATE TABLE IF NOT EXISTS meta (
 	v   TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS classes (
-	id         INTEGER PRIMARY KEY AUTOINCREMENT,
-	code       TEXT NOT NULL UNIQUE,
-	created_at TEXT NOT NULL DEFAULT (datetime('now'))
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	code             TEXT NOT NULL UNIQUE,
+	teacher_passcode TEXT,
+	created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS students (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	delta      INTEGER NOT NULL,
 	reason     TEXT NOT NULL,
 	request_id TEXT,
+	operator   TEXT NOT NULL DEFAULT 'student',
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `
@@ -89,8 +91,65 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
 	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
 `
-	_, err = db.Exec(idx)
-	return err
+	if _, err := db.Exec(idx); err != nil {
+		return err
+	}
+	return migrateM4Columns(db)
+}
+
+// migrateM4Columns 为 M4 教师端补列（issue #11 教训：先 PRAGMA 查列、缺则 ALTER ADD，
+// 绝不把新列引用放进 CREATE TABLE IF NOT EXISTS 同批 DDL）。
+// classes.teacher_passcode：存量班级回填随机口令；point_logs.operator：存量流水默认 'student'。
+func migrateM4Columns(db *sql.DB) error {
+	hasPasscode, err := columnExists(db, "classes", "teacher_passcode")
+	if err != nil {
+		return err
+	}
+	if !hasPasscode {
+		if _, err := db.Exec(`ALTER TABLE classes ADD COLUMN teacher_passcode TEXT`); err != nil {
+			return fmt.Errorf("migrate: add classes.teacher_passcode: %w", err)
+		}
+	}
+	if err := backfillTeacherPasscodes(db); err != nil {
+		return err
+	}
+
+	hasOperator, err := columnExists(db, "point_logs", "operator")
+	if err != nil {
+		return err
+	}
+	if !hasOperator {
+		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN operator TEXT NOT NULL DEFAULT 'student'`); err != nil {
+			return fmt.Errorf("migrate: add point_logs.operator: %w", err)
+		}
+	}
+	return nil
+}
+
+// backfillTeacherPasscodes 为存量班级补随机口令（每班独立随机，逐行回填）。
+func backfillTeacherPasscodes(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id FROM classes WHERE teacher_passcode IS NULL OR teacher_passcode = ''`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := db.Exec(`UPDATE classes SET teacher_passcode = ? WHERE id = ?`, generatePasscode(), id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // columnExists 用 pragma table_info 判断列是否存在（table 为代码内常量，非外部输入）。

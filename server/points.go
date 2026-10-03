@@ -112,9 +112,10 @@ func (s *srv) handleAddPoints(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, err, "update pet")
 		return
 	}
-	// request_id 空串存 NULL：部分唯一索引不约束 NULL，无 requestId 的加分互不冲突
+	// request_id 空串存 NULL：部分唯一索引不约束 NULL，无 requestId 的加分互不冲突；
+	// operator=student 标记学生自助加分（教师端点写 teacher，供 M3 班级墙/审计）
 	if _, err := tx.Exec(
-		`INSERT INTO point_logs (pet_id, delta, reason, request_id) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO point_logs (pet_id, delta, reason, request_id, operator) VALUES (?, ?, ?, ?, 'student')`,
 		petID, req.Value, reason, nilIfEmpty(req.RequestID),
 	); err != nil {
 		writeInternal(w, err, "insert point log")
@@ -132,11 +133,13 @@ func (s *srv) handleAddPoints(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// logEntry 是积分流水中单条记录的响应形状（Value 对应库中 delta）。
+// logEntry 是积分流水中单条记录的响应形状（Value 对应库中 delta，
+// Operator 区分学生自助与教师代加，M4）。
 type logEntry struct {
 	ID        int64  `json:"id"`
 	Value     int    `json:"value"`
 	Reason    string `json:"reason"`
+	Operator  string `json:"operator"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -170,7 +173,7 @@ func (s *srv) handleLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(
-		`SELECT id, delta, reason, created_at FROM point_logs WHERE pet_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
+		`SELECT id, delta, reason, operator, created_at FROM point_logs WHERE pet_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
 		petID, logPageSize, (page-1)*logPageSize,
 	)
 	if err != nil {
@@ -182,7 +185,7 @@ func (s *srv) handleLog(w http.ResponseWriter, r *http.Request) {
 	items := make([]logEntry, 0, logPageSize)
 	for rows.Next() {
 		var e logEntry
-		if err := rows.Scan(&e.ID, &e.Value, &e.Reason, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Value, &e.Reason, &e.Operator, &e.CreatedAt); err != nil {
 			writeInternal(w, err, "scan log")
 			return
 		}
