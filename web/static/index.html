@@ -71,7 +71,39 @@
         </div>
         <button class="btn primary" id="add-points-btn" disabled title="M2 即将开放">＋ 加分喂养</button>
         <p class="hint">加分喂养将在 M2 上线，先把小伙伴领回家吧～</p>
+        <div class="row nav-row">
+          <button id="open-dex" class="btn ghost">📖 宠物图鉴</button>
+          <button id="open-wall" class="btn ghost">🏫 班级墙</button>
+        </div>
       </div>
+    </div>
+  </section>
+
+  <!-- 宠物图鉴（M3） -->
+  <section class="view" data-view="dex" hidden>
+    <div class="card wide-card">
+      <div class="view-head">
+        <h2>宠物图鉴</h2>
+        <button class="btn tiny ghost back-pet">← 我的宠物</button>
+      </div>
+      <p class="subtitle">孵出来的小伙伴才会现身哦</p>
+      <div id="dex-grid" class="dex-grid"></div>
+    </div>
+  </section>
+
+  <!-- 班级墙（M3） -->
+  <section class="view" data-view="wall" hidden>
+    <div class="card wide-card">
+      <div class="view-head">
+        <h2>班级墙</h2>
+        <button class="btn tiny ghost back-pet">← 我的宠物</button>
+      </div>
+      <div class="row sort-row">
+        <button id="wall-sort-points" class="btn tiny primary">按积分</button>
+        <button id="wall-sort-recent" class="btn tiny ghost">最近升级</button>
+      </div>
+      <div id="wall-list" class="wall-list"></div>
+      <div id="wall-profile" class="wall-profile" hidden></div>
     </div>
   </section>
 
