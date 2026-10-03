@@ -7,18 +7,27 @@
   <style>
     body { font-family: system-ui, "Microsoft YaHei", sans-serif; max-width: 960px; margin: 24px auto; padding: 0 16px; color: #243244; }
     h1 { font-size: 20px; }
+    h2 { font-size: 16px; margin-top: 0; }
     .card { border: 1px solid #dfe5ec; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    input, button { padding: 6px 10px; }
+    input, button, select { padding: 6px 10px; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { border-bottom: 1px solid #dfe5ec; padding: 8px 6px; text-align: left; }
     .muted { color: #8a97a6; }
     .ok { color: #2e9e5b; }
     .err { color: #b00; font-size: 13px; }
     .ops button { margin-right: 6px; }
-    /* M5 窄屏适配（<1024px）：花名册表格降级为卡片式列表，触屏目标 ≥44px */
+    .view { display: none; }
+    .view.active { display: block; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row input { flex: 1; min-width: 140px; }
+    .nav-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .nav-row button.active { background: #4c7dff; color: #fff; border: none; }
+    form.add-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    form.add-form input { flex: 1; min-width: 120px; }
+    /* M5 窄屏适配（<1024px）：表格降级为卡片式列表，触屏目标 ≥44px */
     @media (max-width: 1023px) {
       body { margin: 0 auto; padding: 12px; }
-      input, button { min-height: 44px; font-size: 16px; box-sizing: border-box; }
+      input, button, select { min-height: 44px; font-size: 16px; box-sizing: border-box; }
       input { width: 100%; max-width: 100%; margin-bottom: 8px; }
       .card { padding: 12px; }
       table, thead, tbody, tr, td { display: block; }
@@ -28,27 +37,63 @@
       td:last-child { border-bottom: none; }
       td::before { content: attr(data-label); color: #8a97a6; font-size: 13px; flex-shrink: 0; }
       td.ops { justify-content: flex-end; }
-      td.ops button { min-width: 96px; margin-left: 8px; }
+      td.ops button { min-width: 88px; margin-left: 8px; margin-top: 6px; }
+      .row input, form.add-form input { min-width: 100%; }
     }
   </style>
 </head>
 <body>
   <h1>教师工作台</h1>
+  <div class="nav-row" id="main-nav" style="display:none">
+    <button id="nav-work" class="active">名单管理</button>
+    <button id="nav-trash">垃圾桶</button>
+    <button id="btn-logout" style="margin-left:auto">退出登录</button>
+  </div>
 
   <!-- 登录视图 -->
-  <div class="card" id="login-view">
-    <p>班级码：<input id="class-code" placeholder="如 C101"></p>
-    <p>教师密码：<input id="passcode" type="password" placeholder="首次请向管理员获取"></p>
-    <button id="btn-login">登录</button>
+  <div class="card view active" id="login-view">
+    <h2>教师登录</h2>
+    <p>邮箱：<input id="login-email" type="email" placeholder="teacher@example.com"></p>
+    <p>密码：<input id="login-pass" type="password" placeholder="≥8 位"></p>
+    <div class="row">
+      <button id="btn-login">登录</button>
+      <button id="goto-register" class="linklike" style="background:none;border:none;color:#4c7dff;cursor:pointer">没有账号？注册班级</button>
+    </div>
     <span id="login-msg" class="err"></span>
   </div>
 
+  <!-- 注册视图 -->
+  <div class="card view" id="register-view">
+    <h2>注册班级（班主任）</h2>
+    <p>邮箱：<input id="reg-email" type="email" placeholder="teacher@example.com">
+      <button id="btn-send-code">发送验证码</button></p>
+    <p>验证码：<input id="reg-code" placeholder="6 位，10 分钟内有效"></p>
+    <p>密码：<input id="reg-pass" type="password" placeholder="≥8 位"></p>
+    <p>班级名称：<input id="reg-class" placeholder="如 三年级 2 班"></p>
+    <div class="row">
+      <button id="btn-register">注册并进入</button>
+      <button id="goto-login" style="background:none;border:none;color:#4c7dff;cursor:pointer">已有账号？登录</button>
+    </div>
+    <span id="reg-msg" class="err"></span>
+  </div>
+
   <!-- 工作台视图 -->
-  <div id="work-view" style="display:none">
+  <div class="view" id="work-view">
+    <div class="card">
+      <h2>新增学生</h2>
+      <form class="add-form" id="add-form">
+        <input id="add-name" placeholder="姓名">
+        <input id="add-no" placeholder="学号（班内唯一）">
+        <button type="submit">添加</button>
+      </form>
+      <span id="add-msg" class="err"></span>
+    </div>
     <div class="card">
       <h2>班级花名册</h2>
-      <button id="btn-refresh">刷新</button>
-      <span id="work-msg" class="err"></span>
+      <div class="row" style="margin-bottom:8px">
+        <button id="btn-refresh">刷新</button>
+        <span id="work-msg" class="err"></span>
+      </div>
       <table>
         <thead>
           <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>最近加分</th><th>操作</th></tr>
@@ -56,10 +101,23 @@
         <tbody id="roster"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- 垃圾桶视图 -->
+  <div class="view" id="trash-view">
     <div class="card">
-      <h2>修改教师密码</h2>
-      <p>旧密码：<input id="old-pass" type="password"> 新密码：<input id="new-pass" type="password">
-        <button id="btn-pass">修改</button> <span id="pass-msg" class="err"></span></p>
+      <h2>垃圾桶（3 个月内可恢复）</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button id="btn-trash-refresh">刷新</button>
+        <span id="trash-msg" class="err"></span>
+      </div>
+      <table>
+        <thead>
+          <tr><th>学号</th><th>姓名</th><th>删除时间</th><th>操作</th></tr>
+        </thead>
+        <tbody id="trash"></tbody>
+      </table>
+      <p class="muted" style="font-size:12px">超过 3 个月的记录将在每日清理中连同宠物与流水一并删除，不可恢复。</p>
     </div>
   </div>
 
@@ -68,6 +126,7 @@
       'use strict';
       var $ = function (id) { return document.getElementById(id); };
       var TOKEN_KEY = 'teacher_token';
+      var studentIds = {}; // studentNo -> id（行内改宠物名用）
 
       function api(method, path, body, needsAuth) {
         var headers = { 'Content-Type': 'application/json' };
@@ -87,26 +146,65 @@
         });
       }
 
-      $('btn-login').onclick = function () {
-        $('login-msg').textContent = '';
-        api('POST', '/api/teacher/login', { classCode: $('class-code').value.trim(), teacherPasscode: $('passcode').value }, false)
+      function show(view) {
+        ['login-view', 'register-view', 'work-view', 'trash-view'].forEach(function (id) {
+          $(id).classList.toggle('active', id === view);
+        });
+        $('main-nav').style.display = (view === 'work-view' || view === 'trash-view') ? '' : 'none';
+        $('nav-work').classList.toggle('active', view === 'work-view');
+        $('nav-trash').classList.toggle('active', view === 'trash-view');
+      }
+
+      // ---------- 注册 ----------
+      $('btn-send-code').onclick = function () {
+        $('reg-msg').textContent = '';
+        api('POST', '/api/teacher/email-code', { email: $('reg-email').value.trim() }, false)
+          .then(function () { $('reg-msg').className = 'ok'; $('reg-msg').textContent = '验证码已发送（未配置邮件服务时见服务端日志）'; })
+          .catch(function (e) { $('reg-msg').className = 'err'; $('reg-msg').textContent = e.message; });
+      };
+      $('btn-register').onclick = function () {
+        $('reg-msg').textContent = '';
+        api('POST', '/api/teacher/register', {
+          email: $('reg-email').value.trim(),
+          code: $('reg-code').value.trim(),
+          password: $('reg-pass').value,
+          className: $('reg-class').value.trim()
+        }, false)
           .then(function (data) {
             localStorage.setItem(TOKEN_KEY, data.token);
-            showWork();
+            enterWork();
+          })
+          .catch(function (e) { $('reg-msg').className = 'err'; $('reg-msg').textContent = e.message; });
+      };
+      $('goto-register').onclick = function () { show('register-view'); };
+      $('goto-login').onclick = function () { show('login-view'); };
+
+      // ---------- 登录 ----------
+      $('btn-login').onclick = function () {
+        $('login-msg').textContent = '';
+        api('POST', '/api/teacher/login', { email: $('login-email').value.trim(), password: $('login-pass').value }, false)
+          .then(function (data) {
+            localStorage.setItem(TOKEN_KEY, data.token);
+            enterWork();
           })
           .catch(function (e) { $('login-msg').textContent = e.message; });
       };
+      $('btn-logout').onclick = function () {
+        localStorage.removeItem(TOKEN_KEY);
+        show('login-view');
+      };
 
-      function escapeHtmlRow(no, name) { return escapeHtml(no) + '" data-no="' + escapeHtml(no) + '" data-name="' + escapeHtml(name); }
-
+      // ---------- 花名册 ----------
       function loadRoster() {
         api('GET', '/api/teacher/roster', null, true).then(function (data) {
+          studentIds = {};
           $('roster').innerHTML = data.students.map(function (s) {
+            studentIds[s.studentNo] = s.id;
             var pet = s.adopted
-              ? escapeHtml(s.speciesName) + '（' + escapeHtml(s.speciesId) + '）'
+              ? escapeHtml(s.speciesName) + '（' + escapeHtml(s.petName || s.speciesName) + '）'
               : '<span class="muted">未领养</span>';
             var last = s.lastPointsAt || '—';
-            return '<tr data-no="' + escapeHtml(s.studentNo) + '">' +
+            return '<tr data-no="' + escapeHtml(s.studentNo) + '" data-id="' + s.id + '">' +
               '<td data-label="学号">' + escapeHtml(s.studentNo) + '</td>' +
               '<td data-label="姓名">' + escapeHtml(s.name) + '</td>' +
               '<td data-label="宠物">' + pet + '</td>' +
@@ -114,19 +212,19 @@
               '<td data-label="积分">' + (s.adopted ? s.points : '—') + '</td>' +
               '<td data-label="最近加分" class="muted">' + escapeHtml(last) + '</td>' +
               '<td class="ops">' +
-              (s.adopted
-                ? '<button class="do-points">加分</button>'
-                : '<button class="do-adopt">发宠物</button>') +
+              (s.adopted ? '<button class="do-points">加分</button><button class="do-rename">改名</button>' : '<button class="do-adopt">发宠物</button>') +
+              '<button class="do-delete">删除</button>' +
               '</td></tr>';
           }).join('');
         }).catch(function (e) { $('work-msg').textContent = e.message; });
       }
 
-      // 行内操作：发宠物 / 加分（加分理由走预设+自定义弹窗，MVP 用 prompt）
+      // 行内操作：发宠物 / 加分 / 改宠物名 / 删除
       $('roster').addEventListener('click', function (ev) {
         var tr = ev.target.closest('tr');
         if (!tr) return;
         var no = tr.getAttribute('data-no');
+        var id = tr.getAttribute('data-id');
         if (ev.target.classList.contains('do-adopt')) {
           api('POST', '/api/teacher/adopt', { studentNo: no }, true)
             .then(function () { $('work-msg').textContent = ''; loadRoster(); })
@@ -144,29 +242,61 @@
               loadRoster();
             })
             .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
+        } else if (ev.target.classList.contains('do-rename')) {
+          var name = window.prompt('给宠物改名（可随时修改）：');
+          if (!name) return;
+          api('POST', '/api/teacher/pets/' + id + '/name', { name: name }, true)
+            .then(function () { loadRoster(); })
+            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
+        } else if (ev.target.classList.contains('do-delete')) {
+          if (!window.confirm('确定删除学生 ' + no + '？其宠物与流水将进入垃圾桶（3 个月内可恢复）。')) return;
+          api('DELETE', '/api/teacher/students/' + id, null, true)
+            .then(function () { loadRoster(); })
+            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
         }
       });
 
+      // 新增学生
+      $('add-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        $('add-msg').textContent = '';
+        api('POST', '/api/teacher/students', { name: $('add-name').value.trim(), studentNo: $('add-no').value.trim() }, true)
+          .then(function () { $('add-name').value = ''; $('add-no').value = ''; loadRoster(); })
+          .catch(function (e) { $('add-msg').textContent = e.message; });
+      });
+
+      // ---------- 垃圾桶 ----------
+      function loadTrash() {
+        api('GET', '/api/teacher/trash', null, true).then(function (data) {
+          $('trash').innerHTML = data.items.map(function (s) {
+            return '<tr data-id="' + s.id + '">' +
+              '<td data-label="学号">' + escapeHtml(s.studentNo) + '</td>' +
+              '<td data-label="姓名">' + escapeHtml(s.name) + '</td>' +
+              '<td data-label="删除时间" class="muted">' + escapeHtml(s.deletedAt) + '</td>' +
+              '<td class="ops"><button class="do-restore">恢复</button></td></tr>';
+          }).join('') || '<tr><td colspan="4" class="muted">垃圾桶是空的</td></tr>';
+        }).catch(function (e) { $('trash-msg').textContent = e.message; });
+      }
+      $('trash').addEventListener('click', function (ev) {
+        if (!ev.target.classList.contains('do-restore')) return;
+        var tr = ev.target.closest('tr');
+        var id = tr.getAttribute('data-id');
+        api('POST', '/api/teacher/students/' + id + '/restore', null, true)
+          .then(function () { $('trash-msg').textContent = ''; loadTrash(); })
+          .catch(function (e) { $('trash-msg').textContent = e.message; });
+      });
+      $('btn-trash-refresh').onclick = loadTrash;
+
+      $('nav-work').onclick = function () { show('work-view'); loadRoster(); };
+      $('nav-trash').onclick = function () { show('trash-view'); loadTrash(); };
       $('btn-refresh').onclick = loadRoster;
 
-      $('btn-pass').onclick = function () {
-        $('pass-msg').textContent = '';
-        api('POST', '/api/teacher/passcode',
-          { oldPasscode: $('old-pass').value, newPasscode: $('new-pass').value }, true)
-          .then(function () {
-            $('old-pass').value = ''; $('new-pass').value = '';
-            $('pass-msg').className = 'ok'; $('pass-msg').textContent = '已修改';
-          })
-          .catch(function (e) { $('pass-msg').className = 'err'; $('pass-msg').textContent = e.message; });
-      };
-
-      function showWork() {
-        $('login-view').style.display = 'none';
-        $('work-view').style.display = '';
+      function enterWork() {
+        show('work-view');
         loadRoster();
       }
 
-      if (localStorage.getItem(TOKEN_KEY)) showWork();
+      if (localStorage.getItem(TOKEN_KEY)) enterWork();
     })();
   </script>
 </body>

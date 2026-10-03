@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/AI-BBM/electronic-pet/web"
 )
@@ -16,19 +17,20 @@ import (
 type ctxKey int
 
 const (
-	ctxKeyStudent ctxKey = iota // int64 studentID
-	ctxKeyTeacher               // int64 classID
+	ctxKeyStudent ctxKey = iota // M6 起仅保留鉴权语义（学生存量 token 打教师端点 403）
+	ctxKeyTeacher
 )
 
 type srv struct {
 	db          *sql.DB
 	dbMu        sync.Mutex // 串行化 DB 访问（单连接 SQLite，事务内互斥）
 	tokenSecret string
-	levels      LevelConfig // 升级阈值，启动时可经 PET_LEVELS_FILE 覆盖（M2）
+	levels      LevelConfig // 升级阈值，启动时可经 PET_LEVELS_FILE 覆盖
+	mailer      Mailer      // 验证码发信（SMTP 未配置时为 mock）
 }
 
-// New 构建完整路由（含内嵌前端）。同一 dbPath 可重复调用（幂等建表、密钥复用）。
-// 返回值实现 Close() error，调用方（含测试）用后应释放 SQLite 句柄（Windows 文件锁）。
+// New 构建完整路由（M6 纯教师侧）。同一 dbPath 可重复调用（幂等迁移、密钥复用）。
+// 返回值实现 Close() error，调用方（含测试）用后应释放 SQLite 句柄。
 func New(dbPath string) (http.Handler, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
@@ -46,7 +48,9 @@ func New(dbPath string) (http.Handler, error) {
 			return nil, err
 		}
 	}
-	s := &srv{db: db, tokenSecret: secret, levels: levels}
+	s := &srv{db: db, tokenSecret: secret, levels: levels, mailer: NewMailerFromEnv()}
+	s.cleanupExpiredStudents(time.Now()) // 启动清理垃圾桶超期数据
+	s.startTrashCleanupLoop()
 	return &appHandler{srv: s, mux: s.routes()}, nil
 }
 
@@ -63,58 +67,85 @@ func (a *appHandler) Close() error { return a.srv.db.Close() }
 
 func (s *srv) routes() http.Handler {
 	mux := http.NewServeMux()
-
-	mux.HandleFunc("POST /api/join", s.handleJoin)
-
-	authed := s.requireStudent
-	mux.Handle("GET /api/eggs", authed(http.HandlerFunc(s.handleEggs)))
-	mux.Handle("POST /api/adopt", authed(http.HandlerFunc(s.handleAdopt)))
-	mux.Handle("GET /api/pet/me", authed(http.HandlerFunc(s.handlePetMe)))
-	mux.Handle("POST /api/pet/name", authed(http.HandlerFunc(s.handleRename)))
-
-	// M2 加分与积分流水。其余方法显式注册为 405（方法级 pattern 与 "GET /" 无冲突，
-	// 也不能用不带方法的 pattern——它与 "GET /" 互不为子集会 panic）；
-	// 流水不可改删（PRD M2），故 /api/points 仅 POST、/api/pet/me/log 仅 GET。
-	mux.Handle("POST /api/points", authed(http.HandlerFunc(s.handleAddPoints)))
-	mux.Handle("GET /api/pet/me/log", authed(http.HandlerFunc(s.handleLog)))
-	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		mux.HandleFunc(m+" /api/points", s.methodNotAllowed(http.MethodPost))
-	}
-	for _, m := range []string{http.MethodPut, http.MethodDelete} {
-		mux.HandleFunc(m+" /api/pet/me/log", s.methodNotAllowed(http.MethodGet))
-	}
-
-	// M3 图鉴与班级墙（只读端点）。非 GET 方法显式注册为 JSON 405，
-	// 与全局语义一致（否则 ServeMux 默认 405 为纯文本）。
-	mux.Handle("GET /api/dex", authed(http.HandlerFunc(s.handleDex)))
-	mux.Handle("GET /api/class/wall", authed(http.HandlerFunc(s.handleWall)))
-	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		mux.HandleFunc(m+" /api/dex", s.methodNotAllowed(http.MethodGet))
-		mux.HandleFunc(m+" /api/class/wall", s.methodNotAllowed(http.MethodGet))
-	}
-
-	// M4 教师端。登录口免鉴权；其余教师端点走 requireTeacher（角色隔离，学生 token 403）。
-	mux.HandleFunc("POST /api/teacher/login", s.handleTeacherLogin)
 	taught := s.requireTeacher
+
+	// 免鉴权：教师注册 / 登录 / 发验证码
+	mux.HandleFunc("POST /api/teacher/email-code", s.handleTeacherEmailCode)
+	mux.HandleFunc("POST /api/teacher/register", s.handleTeacherRegister)
+	mux.HandleFunc("POST /api/teacher/login", s.handleTeacherLogin)
+
+	// 名单管理（教师鉴权）
+	mux.Handle("POST /api/teacher/students", taught(http.HandlerFunc(s.handleCreateStudent)))
+	mux.Handle("PATCH /api/teacher/students/{id}", taught(http.HandlerFunc(s.handlePatchStudent)))
+	mux.Handle("DELETE /api/teacher/students/{id}", taught(http.HandlerFunc(s.handleDeleteStudent)))
+	mux.Handle("GET /api/teacher/trash", taught(http.HandlerFunc(s.handleTeacherTrash)))
+	mux.Handle("POST /api/teacher/students/{id}/restore", taught(http.HandlerFunc(s.handleRestoreStudent)))
+	mux.Handle("POST /api/teacher/pets/{studentID}/name", taught(http.HandlerFunc(s.handleTeacherRenamePet)))
+
+	// M4 契约沿用：代发宠物 / 代加分 / 花名册
 	mux.Handle("POST /api/teacher/adopt", taught(http.HandlerFunc(s.handleTeacherAdopt)))
 	mux.Handle("POST /api/teacher/points", taught(http.HandlerFunc(s.handleTeacherPoints)))
 	mux.Handle("GET /api/teacher/roster", taught(http.HandlerFunc(s.handleTeacherRoster)))
-	mux.Handle("POST /api/teacher/passcode", taught(http.HandlerFunc(s.handleTeacherPasscode)))
-	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+
+	// 方法级 405（沿用 M2/M4 模式；Allow 头在鉴权前返回）
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/teacher/email-code", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/register", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/login", s.methodNotAllowed(http.MethodPost))
 		mux.HandleFunc(m+" /api/teacher/adopt", s.methodNotAllowed(http.MethodPost))
 		mux.HandleFunc(m+" /api/teacher/points", s.methodNotAllowed(http.MethodPost))
-		mux.HandleFunc(m+" /api/teacher/passcode", s.methodNotAllowed(http.MethodPost))
-		mux.HandleFunc(m+" /api/teacher/login", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/pets/{studentID}/name", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/students/{id}/restore", s.methodNotAllowed(http.MethodPost))
 	}
-	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+	mux.HandleFunc("GET /api/teacher/students", s.methodNotAllowed(http.MethodPost))
+	mux.HandleFunc("PUT /api/teacher/students", s.methodNotAllowed(http.MethodPost))
+	mux.HandleFunc("PATCH /api/teacher/students", s.methodNotAllowed(http.MethodPost))
+	mux.HandleFunc("DELETE /api/teacher/students", s.methodNotAllowed(http.MethodPost))
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodPost} {
+		mux.HandleFunc(m+" /api/teacher/students/{id}", s.methodNotAllowed(http.MethodPatch+", "+http.MethodDelete))
+	}
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/teacher/trash", s.methodNotAllowed(http.MethodGet))
 		mux.HandleFunc(m+" /api/teacher/roster", s.methodNotAllowed(http.MethodGet))
+	}
+
+	// 学生侧已下线（M6）：/api/* 其余路径一律 JSON 404（不能落入 SPA 回退）。
+	// M6-T10 契约：join/eggs/adopt/pet/me/name/points/log/dex/wall 等 GET/POST 均 404。
+	// 逐方法注册（无方法 pattern 与 "GET /" 会触发 ServeMux 冲突 panic）。
+	for _, m := range []string{
+		http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete,
+	} {
+		mux.HandleFunc(m+" /api/", s.handleAPIGone)
 	}
 
 	mux.Handle("GET /", s.staticHandler())
 	return mux
 }
 
-// methodNotAllowed 返回固定允许方法的 405 处理器（鉴权前拦截，M2 流水不可改删）。
+// handleAPIGone 学生侧端点与未知 API 路径的统一 404（带 JSON error）。
+func (s *srv) handleAPIGone(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusNotFound, errJSON("接口不存在"))
+}
+
+// requireTeacher 校验教师 Bearer token，把 classID 注入 context；
+// 学生 token（M6 起已无合法签发途径，存量自然失效）角色不符 403。
+func (s *srv) requireTeacher(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		classID, err := verifyTeacherToken(s.tokenSecret, token)
+		if errors.Is(err, errWrongRole) {
+			writeJSON(w, http.StatusForbidden, errJSON("权限不足"))
+			return
+		}
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, errJSON("未登录或 token 无效"))
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyTeacher, classID)))
+	})
+}
+
+// methodNotAllowed 返回固定允许方法的 405 处理器（鉴权前拦截）。
 func (s *srv) methodNotAllowed(allow string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", allow)
@@ -122,50 +153,7 @@ func (s *srv) methodNotAllowed(allow string) http.HandlerFunc {
 	}
 }
 
-// requireAuth 解析 Bearer token 并校验角色；角色不符 403，token 无效 401。
-func (s *srv) requireAuth(role string, next func(w http.ResponseWriter, r *http.Request, id int64)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		var (
-			id  int64
-			err error
-		)
-		if role == roleTeacher {
-			id, err = verifyTeacherToken(s.tokenSecret, token)
-		} else {
-			id, err = verifyToken(s.tokenSecret, token)
-		}
-		if err != nil {
-			if errors.Is(err, errWrongRole) {
-				writeJSON(w, http.StatusForbidden, errJSON("角色无权访问该端点"))
-				return
-			}
-			writeJSON(w, http.StatusUnauthorized, errJSON("未登录或 token 无效"))
-			return
-		}
-		key := ctxKeyStudent
-		if role == roleTeacher {
-			key = ctxKeyTeacher
-		}
-		next(w, r.WithContext(context.WithValue(r.Context(), key, id)), id)
-	})
-}
-
-// requireStudent 校验学生 Bearer token，把 studentID 注入 context。
-func (s *srv) requireStudent(next http.Handler) http.Handler {
-	return s.requireAuth(roleStudent, func(w http.ResponseWriter, r *http.Request, _ int64) {
-		next.ServeHTTP(w, r)
-	})
-}
-
-// requireTeacher 校验教师 Bearer token，把 classID 注入 context（M4 角色隔离）。
-func (s *srv) requireTeacher(next http.Handler) http.Handler {
-	return s.requireAuth(roleTeacher, func(w http.ResponseWriter, r *http.Request, _ int64) {
-		next.ServeHTTP(w, r)
-	})
-}
-
-// staticHandler 服务内嵌前端；未命中的非 API 路径回退 index.html（SPA）。
+// staticHandler 服务内嵌前端；默认页与 SPA 回退均为教师工作台（M6 起 / 即教师端）。
 func (s *srv) staticHandler() http.Handler {
 	sub, err := fs.Sub(web.Static, "static")
 	if err != nil {
@@ -179,13 +167,21 @@ func (s *srv) staticHandler() http.Handler {
 		}
 		p := strings.TrimPrefix(r.URL.Path, "/")
 		if p == "" {
-			p = "index.html"
+			// 根路径直接直出教师工作台（FileServerFS 对 "/" 只认 index.html）
+			index, err := fs.ReadFile(sub, "teacher.html")
+			if err != nil {
+				http.Error(w, "teacher.html missing", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(index)
+			return
 		}
 		if _, err := fs.Stat(sub, p); err != nil {
-			// SPA 回退：非文件路径一律回 index.html
-			index, err := fs.ReadFile(sub, "index.html")
+			// SPA 回退：非文件路径一律回教师工作台
+			index, err := fs.ReadFile(sub, "teacher.html")
 			if err != nil {
-				http.Error(w, "index.html missing", http.StatusInternalServerError)
+				http.Error(w, "teacher.html missing", http.StatusInternalServerError)
 				return
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
