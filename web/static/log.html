@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>我的宠物 · 加分与流水（M2 骨架预览）</title>
-  <link rel="stylesheet" href="/static/css/points.css">
+  <link rel="stylesheet" href="/css/points.css">
   <style>
     body { font-family: system-ui, "Microsoft YaHei", sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; color: #243244; }
     h1 { font-size: 20px; }
@@ -15,6 +16,13 @@
     .log-pager { margin-top: 8px; }
     .log-pager button { margin-right: 8px; }
     #msg { margin-left: 12px; color: #b00; font-size: 13px; }
+    /* M5 窄屏适配（<1024px 单列自适应） */
+    @media (max-width: 1023px) {
+      body { margin: 0 auto; padding: 12px; }
+      .dev-token input { width: 100%; max-width: 100%; box-sizing: border-box; }
+      .card button, .log-pager button, input, select { min-height: 44px; font-size: 16px; }
+      #msg { display: block; margin: 8px 0 0; }
+    }
   </style>
 </head>
 <body>
@@ -56,7 +64,7 @@
     </div>
   </div>
 
-  <script src="/static/js/points.js"></script>
+  <script src="/js/points.js"></script>
   <script>
     (function () {
       'use strict';
