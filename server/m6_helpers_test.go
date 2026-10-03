@@ -259,6 +259,7 @@ type m6RosterEntry struct {
 	StudentNo string `json:"studentNo"`
 	Name      string `json:"name"`
 	Adopted   bool   `json:"adopted"`
+	PetName   string `json:"petName"`
 	Points    int    `json:"points"`
 }
 

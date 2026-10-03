@@ -96,8 +96,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_students_class_no_live
 // migrateM4Columns 为 M4 引入的补列做存在性迁移（#11 教训：先 PRAGMA 查列、
 // 缺则 ALTER ADD，绝不放进 CREATE TABLE IF NOT EXISTS 同批 DDL）。
 // classes.teacher_passcode：M6 起口令体系废弃，仅保留列不回填；
-// point_logs.operator：新库默认 'teacher'，存量流水保留原值。
+// point_logs.operator：新库默认 'teacher'，存量流水保留原值；
+// point_logs.request_id：idx_point_logs_dedupe 引用该列，M1 老库缺列时
+// 直升 M6 若不先补列则启动即崩（对抗审查 P1 复现）。
 func migrateM4Columns(db *sql.DB) error {
+	hasRequestID, err := columnExists(db, "point_logs", "request_id")
+	if err != nil {
+		return err
+	}
+	if !hasRequestID {
+		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN request_id TEXT`); err != nil {
+			return fmt.Errorf("migrate: add point_logs.request_id: %w", err)
+		}
+	}
 	hasPasscode, err := columnExists(db, "classes", "teacher_passcode")
 	if err != nil {
 		return err

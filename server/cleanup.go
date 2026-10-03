@@ -8,13 +8,18 @@ import (
 // trashCleanupInterval 是垃圾桶清理任务的执行间隔（每日）。
 const trashCleanupInterval = 24 * time.Hour
 
-// startTrashCleanupLoop 启动每日清理循环（随服务进程生命周期）。
-func (s *srv) startTrashCleanupLoop() {
+// startTrashCleanupLoop 启动每日清理循环（随服务进程生命周期；Close 经 stopCh 退出）。
+func (s *srv) startTrashCleanupLoop(stopCh <-chan struct{}) {
 	go func() {
 		ticker := time.NewTicker(trashCleanupInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			s.cleanupExpiredStudents(time.Now())
+		for {
+			select {
+			case <-ticker.C:
+				s.cleanupExpiredStudents(time.Now())
+			case <-stopCh:
+				return
+			}
 		}
 	}()
 }

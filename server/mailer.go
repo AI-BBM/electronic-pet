@@ -296,9 +296,16 @@ type dbExecQuerier interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
+// checkEmailCodeDB 校验验证码（存在、未过期、匹配、未超失败上限）。用后即删，防重放；
+// 连续失败达 verifyCodeMaxAttempts 直接作废该码（防 6 位码空间被暴力猜测）。
 func checkEmailCodeDB(db dbExecQuerier, email, code string) error {
+	const (
+		keyFmt              = "email_code:"
+		failKeyFmt          = "email_code_fail:"
+		maxAttempts   int64 = 5
+	)
 	var value string
-	err := db.QueryRow(`SELECT v FROM meta WHERE k = ?`, "email_code:"+email).Scan(&value)
+	err := db.QueryRow(`SELECT v FROM meta WHERE k = ?`, keyFmt+email).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errors.New("验证码不存在或已使用")
 	}
@@ -317,8 +324,23 @@ func checkEmailCodeDB(db dbExecQuerier, email, code string) error {
 		return errors.New("验证码已过期，请重新获取")
 	}
 	if parts[0] != code {
+		var fails int64
+		_ = db.QueryRow(`SELECT v FROM meta WHERE k = ?`, failKeyFmt+email).Scan(&fails)
+		fails++
+		if fails >= maxAttempts {
+			// 作废：达上限后连正确码也拒绝
+			_, _ = db.Exec(`DELETE FROM meta WHERE k = ?`, keyFmt+email)
+			_, _ = db.Exec(`INSERT INTO meta(k, v) VALUES(?, '1')
+				ON CONFLICT(k) DO UPDATE SET v = '1'`, failKeyFmt+email)
+			return errors.New("验证码错误次数过多，请重新获取")
+		}
+		_, _ = db.Exec(`INSERT INTO meta(k, v) VALUES(?, ?)
+			ON CONFLICT(k) DO UPDATE SET v = excluded.v`, failKeyFmt+email, strconv.FormatInt(fails, 10))
 		return errors.New("验证码不正确")
 	}
-	_, err = db.Exec(`DELETE FROM meta WHERE k = ?`, "email_code:"+email)
+	_, err = db.Exec(`DELETE FROM meta WHERE k = ?`, keyFmt+email)
+	if err == nil {
+		_, _ = db.Exec(`DELETE FROM meta WHERE k = ?`, failKeyFmt+email)
+	}
 	return err
 }
