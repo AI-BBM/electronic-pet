@@ -33,6 +33,8 @@ import (
 	"testing"
 	"time"
 
+	_ "modernc.org/sqlite" // sqlite 驱动注册（原由 teacher_test.go 持有，处置后归本文件）
+
 	"github.com/AI-BBM/electronic-pet/server"
 )
 
