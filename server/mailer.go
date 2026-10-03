@@ -1,15 +1,19 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/tls"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"net/smtp"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Mailer 验证码邮件器（M6 班主任邮箱注册发信用）。
@@ -198,4 +202,123 @@ func buildVerificationMail(from, to, code string) []byte {
 	b.WriteString("\r\n")
 	b.WriteString("你的验证码是：" + code + "（10 分钟内有效，请勿泄露）。\r\n")
 	return []byte(b.String())
+}
+
+// ---------- M6 验证码业务层（来自 #25 分支，传输层复用上方 SMTPMailer） ----------
+
+// 验证码规则（PRD M6）：6 位数字、10 分钟有效、同邮箱 60s 限速、每日上限 10 次。
+// 存储走 meta 表（单实例部署约束），键约定：
+//
+//	email_code:<email>      = <code>|<expiresUnix>
+//	email_code_sent:<email> = <上次发送 unix 秒>
+//	email_code_cnt:<email>:<YYYYMMDD> = 当日已发次数
+const (
+	verifyCodeTTL      = 10 * time.Minute
+	verifyCodeResend   = 60 * time.Second
+	verifyCodeDailyMax = 10
+)
+
+var (
+	errCodeRateLimited = errors.New("发送过于频繁，请 1 分钟后再试")
+	errCodeDailyMax    = errors.New("今日发送次数已达上限，请明日再试")
+)
+
+// NewMailerFromEnv 是 NewMailer 的语义别名（#25 注册链路的调用点命名）。
+func NewMailerFromEnv() Mailer { return NewMailer() }
+
+// generateVerifyCode 生成 6 位数字验证码（crypto/rand）。
+func generateVerifyCode() (string, error) {
+	max := big.NewInt(1000000)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+// sendEmailCode 校验限速后生成、存储并（经 Mailer）发送验证码。
+func (s *srv) sendEmailCode(email string) error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+
+	now := time.Now()
+	var sentAt int64
+	_ = s.db.QueryRow(`SELECT v FROM meta WHERE k = ?`, "email_code_sent:"+email).Scan(&sentAt)
+	if now.Unix()-sentAt < int64(verifyCodeResend.Seconds()) {
+		return errCodeRateLimited
+	}
+	dayKey := fmt.Sprintf("email_code_cnt:%s:%s", email, now.Format("20060102"))
+	var cnt int64
+	_ = s.db.QueryRow(`SELECT v FROM meta WHERE k = ?`, dayKey).Scan(&cnt)
+	if cnt >= verifyCodeDailyMax {
+		return errCodeDailyMax
+	}
+
+	code, err := generateVerifyCode()
+	if err != nil {
+		return err
+	}
+	expires := now.Add(verifyCodeTTL).Unix()
+	value := code + "|" + strconv.FormatInt(expires, 10)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for k, v := range map[string]string{
+		"email_code:" + email:      value,
+		"email_code_sent:" + email: strconv.FormatInt(now.Unix(), 10),
+		dayKey:                     strconv.FormatInt(cnt+1, 10),
+	} {
+		if _, err := tx.Exec(
+			`INSERT INTO meta(k, v) VALUES(?, ?)
+			 ON CONFLICT(k) DO UPDATE SET v = excluded.v`, k, v,
+		); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.mailer.SendVerificationCode(email, code)
+}
+
+// checkEmailCode 校验验证码（存在、未过期、匹配）。用后即删，防重放。
+func (s *srv) checkEmailCode(email, code string) error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	return checkEmailCodeDB(s.db, email, code)
+}
+
+// dbExecQuerier 抽象 *sql.DB 与 *sql.Tx 共有的查询/执行能力（校验码用后即删需在同一事务内）。
+type dbExecQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func checkEmailCodeDB(db dbExecQuerier, email, code string) error {
+	var value string
+	err := db.QueryRow(`SELECT v FROM meta WHERE k = ?`, "email_code:"+email).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errors.New("验证码不存在或已使用")
+	}
+	if err != nil {
+		return err
+	}
+	parts := strings.SplitN(value, "|", 2)
+	if len(parts) != 2 {
+		return errors.New("验证码无效")
+	}
+	expires, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return errors.New("验证码无效")
+	}
+	if time.Now().Unix() > expires {
+		return errors.New("验证码已过期，请重新获取")
+	}
+	if parts[0] != code {
+		return errors.New("验证码不正确")
+	}
+	_, err = db.Exec(`DELETE FROM meta WHERE k = ?`, "email_code:"+email)
+	return err
 }

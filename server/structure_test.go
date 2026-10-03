@@ -19,11 +19,11 @@ func TestStructure_ImplementationFilesExist(t *testing.T) {
 	}
 	root := filepath.Dir(filepath.Dir(thisFile)) // server/ 的上一级即仓库根
 	for _, name := range []string{
-		"server/points.go",
+		"server/teacher.go",
+		"server/mailer.go",
+		"server/cleanup.go",
 		"server/levels.go",
-		"web/static/log.html", // #23：由 web/log.html 移入 static/（原位置在 embed 范围外，页面不可达）
-		"web/static/js/points.js",
-		"web/static/css/points.css",
+		"web/static/teacher.html",
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(name))); err != nil {
 			t.Errorf("缺少实现文件 %s: %v", name, err)

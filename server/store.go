@@ -43,13 +43,12 @@ CREATE TABLE IF NOT EXISTS classes (
 	teacher_passcode TEXT,
 	created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE IF NOT EXISTS students (
+CREATE TABLE IF NOT EXISTS teachers (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
-	class_id   INTEGER NOT NULL REFERENCES classes(id),
-	name       TEXT NOT NULL,
-	student_no TEXT NOT NULL,
-	created_at TEXT NOT NULL DEFAULT (datetime('now')),
-	UNIQUE(class_id, student_no)
+	class_id   INTEGER NOT NULL UNIQUE REFERENCES classes(id),
+	email      TEXT NOT NULL UNIQUE,
+	pass_hash  TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS pets (
 	id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,38 +67,36 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	delta      INTEGER NOT NULL,
 	reason     TEXT NOT NULL,
 	request_id TEXT,
-	operator   TEXT NOT NULL DEFAULT 'student',
+	operator   TEXT NOT NULL DEFAULT 'teacher',
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `
-	// point_logs 的索引不能与建表同批执行：M1 老库的该表已存在（无 request_id 列），
-	// 建表会被跳过而索引会因缺列崩溃（issue #11）。必须先补列、再建索引。
+	// 注意：students 不在上方 DDL 中——它带 UNIQUE 约束的历史，M6 起唯一性
+	// 改由部分唯一索引承担（垃圾桶软删除口径），必须走重建迁移（见 rebuildStudents）。
 	if _, err := db.Exec(ddl); err != nil {
 		return err
 	}
-	hasRequestID, err := columnExists(db, "point_logs", "request_id")
-	if err != nil {
+	if err := rebuildStudents(db); err != nil {
 		return err
 	}
-	if !hasRequestID {
-		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN request_id TEXT`); err != nil {
-			return fmt.Errorf("migrate: add point_logs.request_id: %w", err)
-		}
+	if err := migrateM4Columns(db); err != nil {
+		return err
 	}
 	const idx = `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
 	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_students_class_no_live
+	ON students (class_id, student_no) WHERE deleted_at IS NULL;
 `
-	if _, err := db.Exec(idx); err != nil {
-		return err
-	}
-	return migrateM4Columns(db)
+	_, err := db.Exec(idx)
+	return err
 }
 
-// migrateM4Columns 为 M4 教师端补列（issue #11 教训：先 PRAGMA 查列、缺则 ALTER ADD，
-// 绝不把新列引用放进 CREATE TABLE IF NOT EXISTS 同批 DDL）。
-// classes.teacher_passcode：存量班级回填随机口令；point_logs.operator：存量流水默认 'student'。
+// migrateM4Columns 为 M4 引入的补列做存在性迁移（#11 教训：先 PRAGMA 查列、
+// 缺则 ALTER ADD，绝不放进 CREATE TABLE IF NOT EXISTS 同批 DDL）。
+// classes.teacher_passcode：M6 起口令体系废弃，仅保留列不回填；
+// point_logs.operator：新库默认 'teacher'，存量流水保留原值。
 func migrateM4Columns(db *sql.DB) error {
 	hasPasscode, err := columnExists(db, "classes", "teacher_passcode")
 	if err != nil {
@@ -110,46 +107,97 @@ func migrateM4Columns(db *sql.DB) error {
 			return fmt.Errorf("migrate: add classes.teacher_passcode: %w", err)
 		}
 	}
-	if err := backfillTeacherPasscodes(db); err != nil {
-		return err
-	}
-
 	hasOperator, err := columnExists(db, "point_logs", "operator")
 	if err != nil {
 		return err
 	}
 	if !hasOperator {
-		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN operator TEXT NOT NULL DEFAULT 'student'`); err != nil {
+		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN operator TEXT NOT NULL DEFAULT 'teacher'`); err != nil {
 			return fmt.Errorf("migrate: add point_logs.operator: %w", err)
 		}
 	}
 	return nil
 }
 
-// backfillTeacherPasscodes 为存量班级补随机口令（每班独立随机，逐行回填）。
-func backfillTeacherPasscodes(db *sql.DB) error {
-	rows, err := db.Query(`SELECT id FROM classes WHERE teacher_passcode IS NULL OR teacher_passcode = ''`)
+// rebuildStudents 保证 students 表为 M6 目标 schema（含 deleted_at，唯一性走
+// 部分唯一索引）。SQLite 无法原地修改 UNIQUE 约束，老库（无 deleted_at）按
+// 官方表重建流程的等价序列执行：
+//
+//	PRAGMA foreign_keys=OFF（事务外）→ 建 students_new → 拷贝 → DROP 旧表
+//	→ RENAME → 事务提交 → PRAGMA foreign_keys=ON（事务外）
+//
+// 外键引用（pets.student_id 等）跟随表名，RENAME 后自动指向新表。
+func rebuildStudents(db *sql.DB) error {
+	hasStudents, err := tableExists(db, "students")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return err
+	if !hasStudents {
+		// 新装：直接建目标 schema
+		const fresh = `
+CREATE TABLE students (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	class_id   INTEGER NOT NULL REFERENCES classes(id),
+	name       TEXT NOT NULL,
+	student_no TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT (datetime('now')),
+	deleted_at DATETIME
+);`
+		if _, err := db.Exec(fresh); err != nil {
+			return fmt.Errorf("migrate: create students: %w", err)
 		}
-		ids = append(ids, id)
+		return nil
 	}
-	if err := rows.Err(); err != nil {
+	hasDeletedAt, err := columnExists(db, "students", "deleted_at")
+	if err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if _, err := db.Exec(`UPDATE classes SET teacher_passcode = ? WHERE id = ?`, generatePasscode(), id); err != nil {
-			return err
-		}
+	if hasDeletedAt {
+		return nil // 已是目标 schema（重启幂等）
+	}
+
+	// 老库重建。foreign_keys 开关必须在事务外执行（SQLite 事务内为 no-op）。
+	if _, err := db.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		return fmt.Errorf("migrate: fk off: %w", err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	const rebuild = `
+CREATE TABLE students_new (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	class_id   INTEGER NOT NULL REFERENCES classes(id),
+	name       TEXT NOT NULL,
+	student_no TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT (datetime('now')),
+	deleted_at DATETIME
+);
+INSERT INTO students_new (id, class_id, name, student_no, created_at, deleted_at)
+	SELECT id, class_id, name, student_no, created_at, NULL FROM students;
+DROP TABLE students;
+ALTER TABLE students_new RENAME TO students;
+`
+	if _, err := tx.Exec(rebuild); err != nil {
+		return fmt.Errorf("migrate: rebuild students: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
+		return fmt.Errorf("migrate: fk on: %w", err)
 	}
 	return nil
+}
+
+// tableExists 判断表是否存在。
+func tableExists(db *sql.DB, table string) (bool, error) {
+	var n int
+	err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table,
+	).Scan(&n)
+	return n > 0, err
 }
 
 // columnExists 用 pragma table_info 判断列是否存在（table 为代码内常量，非外部输入）。

@@ -1,39 +1,203 @@
 package server
 
 import (
-	"crypto/rand"
-	"crypto/subtle"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
+
+	crand "crypto/rand"
+	"math/big"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
-// 教师端常量（M4）：加分额度高于学生自助（1..10），理由长度与学生端一致。
+// 教师端常量：代加分额度 1..50（M4 契约延续），理由长度与学生端一致。
 const (
 	teacherMinPointsValue = 1
 	teacherMaxPointsValue = 50
-	maxPasscodeLen        = 32
+	maxReasonLen          = 100
+	maxPasswordLen        = 72 // bcrypt 输入上限
+	maxEmailLen           = 254
+	minPasswordLen        = 8  // PRD M6：密码 ≥8 位
+	trashRetentionDays    = 90 // 垃圾桶保留 3 个月
 )
 
-// generatePasscode 生成 16 位随机十六进制教师口令（建班生成、迁移回填共用）。
-func generatePasscode() string {
-	buf := make([]byte, 8)
-	if _, err := rand.Read(buf); err != nil {
-		panic("crypto/rand unavailable: " + err.Error())
+// trashEntry 是垃圾桶单行（deletedAt 为格式化时间串）。
+type trashEntry struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	StudentNo string `json:"studentNo"`
+	DeletedAt string `json:"deletedAt"`
+}
+
+type studentEntry struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	StudentNo string `json:"studentNo"`
+}
+
+// ---------- 邮箱验证码 ----------
+
+type emailCodeRequest struct {
+	Email string `json:"email"`
+}
+
+func validEmail(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > maxEmailLen {
+		return false
 	}
-	return hex.EncodeToString(buf)
+	at := strings.IndexByte(s, '@')
+	return at > 0 && at < len(s)-1 && !strings.ContainsAny(s, " \t\r\n")
+}
+
+// handleTeacherEmailCode 发送注册验证码（SMTP 未配置时 mock 记日志）。
+func (s *srv) handleTeacherEmailCode(w http.ResponseWriter, r *http.Request) {
+	var req emailCodeRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	if !validEmail(email) {
+		writeJSON(w, http.StatusBadRequest, errJSON("email 格式不合法"))
+		return
+	}
+	if err := s.sendEmailCode(email); err != nil {
+		if errors.Is(err, errCodeRateLimited) || errors.Is(err, errCodeDailyMax) {
+			writeJSON(w, http.StatusTooManyRequests, errJSON("%s", err.Error()))
+			return
+		}
+		writeInternal(w, err, "send email code")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// ---------- 注册与登录 ----------
+
+type teacherRegisterRequest struct {
+	Email     string `json:"email"`
+	Code      string `json:"code"`
+	Password  string `json:"password"`
+	ClassName string `json:"className"`
+}
+
+// handleTeacherRegister 邮箱+验证码+密码注册：注册即建班，一生一班。
+func (s *srv) handleTeacherRegister(w http.ResponseWriter, r *http.Request) {
+	var req teacherRegisterRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	className := strings.TrimSpace(req.ClassName)
+	if !validEmail(email) {
+		writeJSON(w, http.StatusBadRequest, errJSON("email 格式不合法"))
+		return
+	}
+	if n := utf8.RuneCountInString(req.Password); n < minPasswordLen || n > maxPasswordLen {
+		writeJSON(w, http.StatusBadRequest, errJSON("password 需为 %d..%d 位", minPasswordLen, maxPasswordLen))
+		return
+	}
+	if className == "" {
+		writeJSON(w, http.StatusBadRequest, errJSON("className 不能为空"))
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		writeInternal(w, err, "db begin")
+		return
+	}
+	defer tx.Rollback()
+
+	var emailTaken int
+	if err := tx.QueryRow(`SELECT 1 FROM teachers WHERE email = ?`, email).Scan(&emailTaken); err == nil {
+		writeJSON(w, http.StatusConflict, errJSON("该邮箱已注册"))
+		return
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		writeInternal(w, err, "check email")
+		return
+	}
+	if err := checkEmailCodeDB(tx, email, strings.TrimSpace(req.Code)); err != nil {
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeInternal(w, err, "hash password")
+		return
+	}
+	code, err := s.generateClassCode(tx)
+	if err != nil {
+		writeInternal(w, err, "gen class code")
+		return
+	}
+	res, err := tx.Exec(`INSERT INTO classes(code) VALUES(?)`, code)
+	if err != nil {
+		writeInternal(w, err, "insert class")
+		return
+	}
+	classID, err := res.LastInsertId()
+	if err != nil {
+		writeInternal(w, err, "class id")
+		return
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO teachers(class_id, email, pass_hash) VALUES(?,?,?)`,
+		classID, email, string(hash),
+	); err != nil {
+		writeInternal(w, err, "insert teacher")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeInternal(w, err, "commit")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token": signTeacherToken(s.tokenSecret, classID),
+	})
+}
+
+// generateClassCode 生成 "C" + 6 位随机的唯一班级码。在调用方事务内查重
+// （单连接池下 s.db 查询会与未提交事务争抢唯一连接而死锁）。
+func (s *srv) generateClassCode(tx *sql.Tx) (string, error) {
+	for i := 0; i < 32; i++ {
+		code := "C" + randomDigits(6)
+		var exists int
+		err := tx.QueryRow(`SELECT 1 FROM classes WHERE code = ?`, code).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return code, nil
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+	return "C" + randomDigits(12), nil // 极端兜底：更长随机串
 }
 
 type teacherLoginRequest struct {
-	ClassCode       string `json:"classCode"`
-	TeacherPasscode string `json:"teacherPasscode"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// handleTeacherLogin 班级码 + 教师密码 → 教师 token（role=teacher，id=classID）。
-// 登录口免鉴权；密码比较用常数时间。
+// handleTeacherLogin 邮箱 + 密码 → 教师 token（role=teacher，id=classID）。
+// M6 起替代 M4 口令式登录。
 func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 	var req teacherLoginRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -44,32 +208,31 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
-	req.ClassCode = strings.TrimSpace(req.ClassCode)
-	req.TeacherPasscode = strings.TrimSpace(req.TeacherPasscode)
-	if req.ClassCode == "" || req.TeacherPasscode == "" {
-		writeJSON(w, http.StatusBadRequest, errJSON("classCode、teacherPasscode 均不能为空"))
+	email := strings.TrimSpace(req.Email)
+	if email == "" || req.Password == "" {
+		writeJSON(w, http.StatusBadRequest, errJSON("email、password 均不能为空"))
 		return
 	}
 
 	s.dbMu.Lock()
 	var (
 		classID  int64
-		passcode sql.NullString
+		passHash string
 	)
 	err := s.db.QueryRow(
-		`SELECT id, teacher_passcode FROM classes WHERE code = ?`, req.ClassCode,
-	).Scan(&classID, &passcode)
+		`SELECT class_id, pass_hash FROM teachers WHERE email = ?`, email,
+	).Scan(&classID, &passHash)
 	s.dbMu.Unlock()
 	if errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, http.StatusNotFound, errJSON("班级不存在"))
+		writeJSON(w, http.StatusUnauthorized, errJSON("邮箱或密码不正确"))
 		return
 	}
 	if err != nil {
-		writeInternal(w, err, "load class")
+		writeInternal(w, err, "load teacher")
 		return
 	}
-	if subtle.ConstantTimeCompare([]byte(passcode.String), []byte(req.TeacherPasscode)) != 1 {
-		writeJSON(w, http.StatusUnauthorized, errJSON("教师密码不正确"))
+	if bcrypt.CompareHashAndPassword([]byte(passHash), []byte(req.Password)) != nil {
+		writeJSON(w, http.StatusUnauthorized, errJSON("邮箱或密码不正确"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -77,17 +240,253 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// teacherStudentID 解析教师 token 所属班级内指定学号的学生 id；不存在返回 0。
-func teacherStudentID(tx *sql.Tx, classID int64, studentNo string) (int64, error) {
-	var id int64
-	err := tx.QueryRow(
-		`SELECT id FROM students WHERE class_id = ? AND student_no = ?`, classID, studentNo,
-	).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
-	return id, err
+// ---------- 名单管理 ----------
+
+type createStudentRequest struct {
+	Name      string `json:"name"`
+	StudentNo string `json:"studentNo"`
 }
+
+func cleanStudentFields(name, studentNo string) (string, string, bool) {
+	name = strings.TrimSpace(name)
+	studentNo = strings.TrimSpace(studentNo)
+	if name == "" || studentNo == "" {
+		return "", "", false
+	}
+	if utf8.RuneCountInString(name) > 24 || utf8.RuneCountInString(studentNo) > 24 {
+		return "", "", false
+	}
+	return name, studentNo, true
+}
+
+// handleCreateStudent 增：姓名 + 学号（班内在册唯一）。
+func (s *srv) handleCreateStudent(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+
+	var req createStudentRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	name, studentNo, ok := cleanStudentFields(req.Name, req.StudentNo)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, errJSON("name、studentNo 均不能为空且不超过 24 字符"))
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	res, err := s.db.Exec(
+		`INSERT INTO students(class_id, name, student_no) VALUES(?,?,?)`,
+		classID, name, studentNo,
+	)
+	if err != nil {
+		if isUniqueConstraintErr(err) {
+			writeJSON(w, http.StatusConflict, errJSON("该学号已在册"))
+			return
+		}
+		writeInternal(w, err, "insert student")
+		return
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		writeInternal(w, err, "student id")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"student": studentEntry{ID: id, Name: name, StudentNo: studentNo},
+	})
+}
+
+type patchStudentRequest struct {
+	Name      *string `json:"name"`
+	StudentNo *string `json:"studentNo"`
+}
+
+// handlePatchStudent 改：姓名、学号（改号后班内仍须在册唯一）。
+func (s *srv) handlePatchStudent(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+	studentID, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	var req patchStudentRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	if req.Name == nil && req.StudentNo == nil {
+		writeJSON(w, http.StatusBadRequest, errJSON("name、studentNo 至少提供一项"))
+		return
+	}
+	name := strings.TrimSpace(deref(req.Name))
+	studentNo := strings.TrimSpace(deref(req.StudentNo))
+	if (req.Name != nil && name == "") || (req.StudentNo != nil && studentNo == "") {
+		writeJSON(w, http.StatusBadRequest, errJSON("name、studentNo 不能为空白"))
+		return
+	}
+	if utf8.RuneCountInString(name) > 24 || utf8.RuneCountInString(studentNo) > 24 {
+		writeJSON(w, http.StatusBadRequest, errJSON("name、studentNo 不能超过 24 字符"))
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+
+	// 必须是本班在册学生（垃圾桶内的不可改）
+	var exists int
+	err := s.db.QueryRow(
+		`SELECT 1 FROM students WHERE id = ? AND class_id = ? AND deleted_at IS NULL`,
+		studentID, classID,
+	).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errJSON("学生不存在"))
+		return
+	}
+	if err != nil {
+		writeInternal(w, err, "load student")
+		return
+	}
+
+	if req.Name != nil {
+		if _, err := s.db.Exec(`UPDATE students SET name = ? WHERE id = ?`, name, studentID); err != nil {
+			writeInternal(w, err, "update name")
+			return
+		}
+	}
+	if req.StudentNo != nil {
+		if _, err := s.db.Exec(
+			`UPDATE students SET student_no = ? WHERE id = ?`, studentNo, studentID,
+		); err != nil {
+			if isUniqueConstraintErr(err) {
+				writeJSON(w, http.StatusConflict, errJSON("该学号已被在册学生占用"))
+				return
+			}
+			writeInternal(w, err, "update student_no")
+			return
+		}
+	}
+
+	var e studentEntry
+	if err := s.db.QueryRow(
+		`SELECT id, name, student_no FROM students WHERE id = ?`, studentID,
+	).Scan(&e.ID, &e.Name, &e.StudentNo); err != nil {
+		writeInternal(w, err, "reload student")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"student": e})
+}
+
+// handleDeleteStudent 删：进垃圾桶（软删除），宠物流水保留、花名册不再显示。
+func (s *srv) handleDeleteStudent(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+	studentID, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	res, err := s.db.Exec(
+		`UPDATE students SET deleted_at = ?
+		 WHERE id = ? AND class_id = ? AND deleted_at IS NULL`,
+		time.Now().Unix(), studentID, classID,
+	)
+	if err != nil {
+		writeInternal(w, err, "soft delete")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeJSON(w, http.StatusNotFound, errJSON("学生不存在"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleTeacherTrash 垃圾桶列表（按删除时间倒序）。
+func (s *srv) handleTeacherTrash(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	rows, err := s.db.Query(
+		`SELECT id, name, student_no, deleted_at FROM students
+		 WHERE class_id = ? AND deleted_at IS NOT NULL
+		 ORDER BY deleted_at DESC`, classID,
+	)
+	if err != nil {
+		writeInternal(w, err, "list trash")
+		return
+	}
+	defer rows.Close()
+
+	items := []trashEntry{}
+	for rows.Next() {
+		var (
+			e         trashEntry
+			deletedAt int64
+		)
+		if err := rows.Scan(&e.ID, &e.Name, &e.StudentNo, &deletedAt); err != nil {
+			writeInternal(w, err, "scan trash")
+			return
+		}
+		e.DeletedAt = time.Unix(deletedAt, 0).Format("2006-01-02 15:04:05")
+		items = append(items, e)
+	}
+	if err := rows.Err(); err != nil {
+		writeInternal(w, err, "list trash")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// handleRestoreStudent 恢复：学号未被在册学生占用即可（冲突 409）。
+func (s *srv) handleRestoreStudent(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+	studentID, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	res, err := s.db.Exec(
+		`UPDATE students SET deleted_at = NULL
+		 WHERE id = ? AND class_id = ? AND deleted_at IS NOT NULL`,
+		studentID, classID,
+	)
+	if err != nil {
+		if isUniqueConstraintErr(err) {
+			writeJSON(w, http.StatusConflict, errJSON("该学号已被在册学生占用，无法恢复"))
+			return
+		}
+		writeInternal(w, err, "restore")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeJSON(w, http.StatusNotFound, errJSON("垃圾桶中不存在该学生"))
+		return
+	}
+	var e studentEntry
+	if err := s.db.QueryRow(
+		`SELECT id, name, student_no FROM students WHERE id = ?`, studentID,
+	).Scan(&e.ID, &e.Name, &e.StudentNo); err != nil {
+		writeInternal(w, err, "reload student")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"student": e})
+}
+
+// ---------- 发宠物 / 加分 / 花名册（M4 契约延续，对象为名单内在册学生） ----------
 
 type teacherAdoptRequest struct {
 	StudentNo string `json:"studentNo"`
@@ -121,7 +520,7 @@ func (s *srv) handleTeacherAdopt(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	studentID, err := teacherStudentID(tx, classID, studentNo)
+	studentID, err := liveStudentID(tx, classID, studentNo)
 	if err != nil {
 		writeInternal(w, err, "load student")
 		return
@@ -209,7 +608,7 @@ func (s *srv) handleTeacherPoints(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	studentID, err := teacherStudentID(tx, classID, studentNo)
+	studentID, err := liveStudentID(tx, classID, studentNo)
 	if err != nil {
 		writeInternal(w, err, "load student")
 		return
@@ -299,7 +698,7 @@ type rosterEntry struct {
 	LastPointsAt string `json:"lastPointsAt"`
 }
 
-// handleTeacherRoster 全班花名册（只读）：姓名/学号、宠物种类/等级、积分、最近加分时间。
+// handleTeacherRoster 花名册（只读，仅在册学生）：姓名/学号、宠物、积分、最近加分。
 func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 	classID := r.Context().Value(ctxKeyTeacher).(int64)
 
@@ -309,7 +708,7 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 		`SELECT s.student_no, s.name, p.id, p.species_id, p.level, p.points,
 		        (SELECT MAX(created_at) FROM point_logs pl WHERE pl.pet_id = p.id)
 		 FROM students s LEFT JOIN pets p ON p.student_id = s.id
-		 WHERE s.class_id = ?
+		 WHERE s.class_id = ? AND s.deleted_at IS NULL
 		 ORDER BY s.student_no ASC`,
 		classID,
 	)
@@ -351,16 +750,21 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"students": students})
 }
 
-type teacherPasscodeRequest struct {
-	OldPasscode string `json:"oldPasscode"`
-	NewPasscode string `json:"newPasscode"`
+// ---------- 教师改宠物名 ----------
+
+type teacherRenameRequest struct {
+	Name string `json:"name"`
 }
 
-// handleTeacherPasscode 修改本班教师密码：旧密码常数时间比对，新密码 1..32 字符。
-func (s *srv) handleTeacherPasscode(w http.ResponseWriter, r *http.Request) {
+// handleTeacherRenamePet 教师改宠物名：可随时多次改（M6 移除 M1 一次限制）。
+func (s *srv) handleTeacherRenamePet(w http.ResponseWriter, r *http.Request) {
 	classID := r.Context().Value(ctxKeyTeacher).(int64)
+	studentID, ok := pathID(w, r, "studentID")
+	if !ok {
+		return
+	}
 
-	var req teacherPasscodeRequest
+	var req teacherRenameRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		if errors.Is(err, errBodyTooLarge) {
 			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
@@ -369,27 +773,111 @@ func (s *srv) handleTeacherPasscode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
-	newPasscode := strings.TrimSpace(req.NewPasscode)
-	if n := utf8.RuneCountInString(newPasscode); n == 0 || n > maxPasscodeLen {
-		writeJSON(w, http.StatusBadRequest, errJSON("新密码需为 1..%d 个字符", maxPasscodeLen))
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, errJSON("name 不能为空"))
+		return
+	}
+	if utf8.RuneCountInString(name) > 24 {
+		writeJSON(w, http.StatusBadRequest, errJSON("name 不能超过 24 个字符"))
 		return
 	}
 
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
-	var current sql.NullString
-	err := s.db.QueryRow(`SELECT teacher_passcode FROM classes WHERE id = ?`, classID).Scan(&current)
+
+	var live int
+	err := s.db.QueryRow(
+		`SELECT 1 FROM students WHERE id = ? AND class_id = ? AND deleted_at IS NULL`,
+		studentID, classID,
+	).Scan(&live)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errJSON("学生不存在"))
+		return
+	}
 	if err != nil {
-		writeInternal(w, err, "load passcode")
+		writeInternal(w, err, "load student")
 		return
 	}
-	if subtle.ConstantTimeCompare([]byte(current.String), []byte(strings.TrimSpace(req.OldPasscode))) != 1 {
-		writeJSON(w, http.StatusForbidden, errJSON("旧密码不正确"))
+
+	var (
+		petID, level, points int64
+		speciesID            string
+	)
+	err = s.db.QueryRow(
+		`SELECT id, species_id, level, points FROM pets WHERE student_id = ?`, studentID,
+	).Scan(&petID, &speciesID, &level, &points)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, errJSON("该学生还没有宠物"))
 		return
 	}
-	if _, err := s.db.Exec(`UPDATE classes SET teacher_passcode = ? WHERE id = ?`, newPasscode, classID); err != nil {
-		writeInternal(w, err, "update passcode")
+	if err != nil {
+		writeInternal(w, err, "load pet")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	if _, err := s.db.Exec(
+		`UPDATE pets SET name = ?, name_customized = 1 WHERE id = ?`, name, petID,
+	); err != nil {
+		writeInternal(w, err, "rename pet")
+		return
+	}
+	sp, ok := speciesByID[speciesID]
+	if !ok {
+		writeInternal(w, errors.New("species not found: "+speciesID), "load pet")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"pet": petJSON(petID, name, int(level), int(points), sp, s.levels),
+	})
+}
+
+// ---------- 共用小工具 ----------
+
+// liveStudentID 解析教师班级内在册学生的 id；不存在（或已删）返回 0。
+func liveStudentID(tx *sql.Tx, classID int64, studentNo string) (int64, error) {
+	var id int64
+	err := tx.QueryRow(
+		`SELECT id FROM students WHERE class_id = ? AND student_no = ? AND deleted_at IS NULL`,
+		classID, studentNo,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+// pathID 解析路径中的正整数 id 参数（非法时已写好 400 响应）。
+func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
+	v := r.PathValue(name)
+	id, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, errJSON("路径参数 %s 非法", name))
+		return 0, false
+	}
+	return id, true
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// isUniqueConstraintErr 判断是否 SQLite 唯一约束冲突。
+func isUniqueConstraintErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+// randomDigits 生成 n 位随机数字串。
+func randomDigits(n int) string {
+	buf := make([]byte, n)
+	for i := range buf {
+		b, err := crand.Int(crand.Reader, big.NewInt(10))
+		if err != nil {
+			panic("crypto/rand unavailable: " + err.Error())
+		}
+		buf[i] = byte('0' + b.Int64())
+	}
+	return string(buf)
 }
