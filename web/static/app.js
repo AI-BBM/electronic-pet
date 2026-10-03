@@ -85,7 +85,12 @@
     state.eggs.forEach(function (egg) {
       var el = document.createElement("div");
       el.className = "egg";
-      el.style.background = "linear-gradient(160deg, " + egg.color + "cc, " + egg.color + ")";
+      // 蛋图（OSS 直链）叠在色蛋光晕上（#18：视觉分档纯装饰，孵化仍服务端随机）
+      // url() 加引号：#14 签名 URL 将含 &/= 等字符，避免未来 CSS 多背景层被截断
+      el.style.backgroundImage = 'url("' + egg.imageUrl + '"), linear-gradient(160deg, ' + egg.color + "cc, " + egg.color + ")";
+      el.style.backgroundSize = "contain, cover";
+      el.style.backgroundPosition = "center, center";
+      el.style.backgroundRepeat = "no-repeat, no-repeat";
       el.title = "神秘的蛋";
       el.addEventListener("click", function () {
         state.selectedEgg = egg.id;
