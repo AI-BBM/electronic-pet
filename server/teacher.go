@@ -66,7 +66,8 @@ func (s *srv) handleTeacherEmailCode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
-	email := strings.TrimSpace(req.Email)
+	// 统一小写规范化（与注册/登录一致，防大小写变体绕过限速/唯一键）
+	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if !validEmail(email) {
 		writeJSON(w, http.StatusBadRequest, errJSON("email 格式不合法"))
 		return
@@ -102,14 +103,16 @@ func (s *srv) handleTeacherRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
-	email := strings.TrimSpace(req.Email)
+	// 邮箱统一小写规范化（唯一键 BINARY 排序，不做则大小写变体可注册多账号）
+	email := strings.ToLower(strings.TrimSpace(req.Email))
 	className := strings.TrimSpace(req.ClassName)
 	if !validEmail(email) {
 		writeJSON(w, http.StatusBadRequest, errJSON("email 格式不合法"))
 		return
 	}
-	if n := utf8.RuneCountInString(req.Password); n < minPasswordLen || n > maxPasswordLen {
-		writeJSON(w, http.StatusBadRequest, errJSON("password 需为 %d..%d 位", minPasswordLen, maxPasswordLen))
+	// bcrypt 输入上限 72 字节：按字节而非 rune 校验，超限前置 400（否则 500）
+	if n := utf8.RuneCountInString(req.Password); n < minPasswordLen || len(req.Password) > maxPasswordLen {
+		writeJSON(w, http.StatusBadRequest, errJSON("password 需为 %d..%d 位且不超过 %d 字节", minPasswordLen, maxPasswordLen, maxPasswordLen))
 		return
 	}
 	if className == "" {
@@ -119,6 +122,23 @@ func (s *srv) handleTeacherRegister(w http.ResponseWriter, r *http.Request) {
 
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
+	// 邮箱查重前置（同锁内单查询，无事务占用连接）：已注册 409 优先于码校验
+	var emailTaken int
+	if err := s.db.QueryRow(`SELECT 1 FROM teachers WHERE email = ?`, email).Scan(&emailTaken); err == nil {
+		writeJSON(w, http.StatusConflict, errJSON("该邮箱已注册"))
+		return
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		writeInternal(w, err, "check email")
+		return
+	}
+
+	// 验证码校验必须在注册事务之前：单连接池下事务持连接期间再用 s.db 会死锁；
+	// fail 计数/删码也需跨事务持久。dbMu 持有期间操作等价原子，无并发重放窗口。
+	if err := checkEmailCodeDB(s.db, email, strings.TrimSpace(req.Code)); err != nil {
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		writeInternal(w, err, "db begin")
@@ -126,18 +146,6 @@ func (s *srv) handleTeacherRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	var emailTaken int
-	if err := tx.QueryRow(`SELECT 1 FROM teachers WHERE email = ?`, email).Scan(&emailTaken); err == nil {
-		writeJSON(w, http.StatusConflict, errJSON("该邮箱已注册"))
-		return
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		writeInternal(w, err, "check email")
-		return
-	}
-	if err := checkEmailCodeDB(tx, email, strings.TrimSpace(req.Code)); err != nil {
-		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
-		return
-	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		writeInternal(w, err, "hash password")
@@ -208,7 +216,8 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
 		return
 	}
-	email := strings.TrimSpace(req.Email)
+	// 统一小写规范化（与注册一致）
+	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" || req.Password == "" {
 		writeJSON(w, http.StatusBadRequest, errJSON("email、password 均不能为空"))
 		return
@@ -224,6 +233,9 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 	).Scan(&classID, &passHash)
 	s.dbMu.Unlock()
 	if errors.Is(err, sql.ErrNoRows) {
+		// 邮箱不存在也跑一次 dummy 比较：抹平与存在分支的耗时差，防计时枚举邮箱
+		_ = bcrypt.CompareHashAndPassword(
+			[]byte("$2a$10$7EqJtq98hPqEX7fNZaFWoOhi5B0X8a0GcH0p1Vf0NE1pUqYCTaEmW"), []byte(req.Password))
 		writeJSON(w, http.StatusUnauthorized, errJSON("邮箱或密码不正确"))
 		return
 	}
@@ -357,14 +369,22 @@ func (s *srv) handlePatchStudent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 双字段更新放同一事务：学号撞号 409 时姓名不得已改（原子性）
+	tx, err := s.db.Begin()
+	if err != nil {
+		writeInternal(w, err, "db begin")
+		return
+	}
+	defer tx.Rollback()
+
 	if req.Name != nil {
-		if _, err := s.db.Exec(`UPDATE students SET name = ? WHERE id = ?`, name, studentID); err != nil {
+		if _, err := tx.Exec(`UPDATE students SET name = ? WHERE id = ?`, name, studentID); err != nil {
 			writeInternal(w, err, "update name")
 			return
 		}
 	}
 	if req.StudentNo != nil {
-		if _, err := s.db.Exec(
+		if _, err := tx.Exec(
 			`UPDATE students SET student_no = ? WHERE id = ?`, studentNo, studentID,
 		); err != nil {
 			if isUniqueConstraintErr(err) {
@@ -374,6 +394,10 @@ func (s *srv) handlePatchStudent(w http.ResponseWriter, r *http.Request) {
 			writeInternal(w, err, "update student_no")
 			return
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		writeInternal(w, err, "commit")
+		return
 	}
 
 	var e studentEntry
@@ -693,19 +717,20 @@ type rosterEntry struct {
 	Adopted      bool   `json:"adopted"`
 	SpeciesID    string `json:"speciesId"`
 	SpeciesName  string `json:"speciesName"`
+	PetName      string `json:"petName"`
 	Level        int    `json:"level"`
 	Points       int    `json:"points"`
 	LastPointsAt string `json:"lastPointsAt"`
 }
 
-// handleTeacherRoster 花名册（只读，仅在册学生）：姓名/学号、宠物、积分、最近加分。
+// handleTeacherRoster 花名册（只读，仅在册学生）：姓名/学号、宠物（含宠物名）、积分、最近加分。
 func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 	classID := r.Context().Value(ctxKeyTeacher).(int64)
 
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
 	rows, err := s.db.Query(
-		`SELECT s.student_no, s.name, p.id, p.species_id, p.level, p.points,
+		`SELECT s.student_no, s.name, p.id, p.species_id, p.name, p.level, p.points,
 		        (SELECT MAX(created_at) FROM point_logs pl WHERE pl.pet_id = p.id)
 		 FROM students s LEFT JOIN pets p ON p.student_id = s.id
 		 WHERE s.class_id = ? AND s.deleted_at IS NULL
@@ -724,10 +749,11 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			e             rosterEntry
 			petID         sql.NullInt64
 			speciesID     sql.NullString
+			petName       sql.NullString
 			level, points sql.NullInt64
 			lastPoints    sql.NullString
 		)
-		if err := rows.Scan(&e.StudentNo, &e.Name, &petID, &speciesID, &level, &points, &lastPoints); err != nil {
+		if err := rows.Scan(&e.StudentNo, &e.Name, &petID, &speciesID, &petName, &level, &points, &lastPoints); err != nil {
 			writeInternal(w, err, "scan roster")
 			return
 		}
@@ -736,6 +762,7 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			e.Level = int(level.Int64)
 			e.Points = int(points.Int64)
 			e.LastPointsAt = lastPoints.String
+			e.PetName = petName.String
 			if sp, ok := speciesByID[speciesID.String]; ok {
 				e.SpeciesID = sp.ID
 				e.SpeciesName = sp.Name

@@ -25,8 +25,9 @@ type srv struct {
 	db          *sql.DB
 	dbMu        sync.Mutex // 串行化 DB 访问（单连接 SQLite，事务内互斥）
 	tokenSecret string
-	levels      LevelConfig // 升级阈值，启动时可经 PET_LEVELS_FILE 覆盖
-	mailer      Mailer      // 验证码发信（SMTP 未配置时为 mock）
+	levels      LevelConfig   // 升级阈值，启动时可经 PET_LEVELS_FILE 覆盖
+	mailer      Mailer        // 验证码发信（SMTP 未配置时为 mock）
+	cleanupStop chan struct{} // 关闭以停止每日清理循环
 }
 
 // New 构建完整路由（M6 纯教师侧）。同一 dbPath 可重复调用（幂等迁移、密钥复用）。
@@ -48,9 +49,9 @@ func New(dbPath string) (http.Handler, error) {
 			return nil, err
 		}
 	}
-	s := &srv{db: db, tokenSecret: secret, levels: levels, mailer: NewMailerFromEnv()}
+	s := &srv{db: db, tokenSecret: secret, levels: levels, mailer: NewMailerFromEnv(), cleanupStop: make(chan struct{})}
 	s.cleanupExpiredStudents(time.Now()) // 启动清理垃圾桶超期数据
-	s.startTrashCleanupLoop()
+	s.startTrashCleanupLoop(s.cleanupStop)
 	return &appHandler{srv: s, mux: s.routes()}, nil
 }
 
@@ -62,8 +63,16 @@ type appHandler struct {
 
 func (a *appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { a.mux.ServeHTTP(w, r) }
 
-// Close 释放底层 SQLite 连接。
-func (a *appHandler) Close() error { return a.srv.db.Close() }
+// Close 释放底层 SQLite 连接并停止每日清理循环。
+func (a *appHandler) Close() error {
+	select {
+	case <-a.srv.cleanupStop:
+		// 已停止
+	default:
+		close(a.srv.cleanupStop)
+	}
+	return a.srv.db.Close()
+}
 
 func (s *srv) routes() http.Handler {
 	mux := http.NewServeMux()
