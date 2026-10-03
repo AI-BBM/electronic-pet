@@ -80,6 +80,15 @@ func (s *srv) routes() http.Handler {
 		mux.HandleFunc(m+" /api/pet/me/log", s.methodNotAllowed(http.MethodGet))
 	}
 
+	// M3 图鉴与班级墙（只读端点）。非 GET 方法显式注册为 JSON 405，
+	// 与全局语义一致（否则 ServeMux 默认 405 为纯文本）。
+	mux.Handle("GET /api/dex", authed(http.HandlerFunc(s.handleDex)))
+	mux.Handle("GET /api/class/wall", authed(http.HandlerFunc(s.handleWall)))
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		mux.HandleFunc(m+" /api/dex", s.methodNotAllowed(http.MethodGet))
+		mux.HandleFunc(m+" /api/class/wall", s.methodNotAllowed(http.MethodGet))
+	}
+
 	mux.Handle("GET /", s.staticHandler())
 	return mux
 }
