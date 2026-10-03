@@ -5,11 +5,10 @@ import (
 	"math/rand/v2"
 )
 
-// 占位 manifest：正式 manifest（version/eggs/species[id,name,rarity,stages,silhouette]）
-// 由素材线 Issue #4 交付后替换，species.id 为稳定 slug，替换时仅换 stages 的 URL。
-// M1 仅幼年期（stages[0]），silhouette 留空。
-// id/name/rarity 已对齐 canonical 物种定稿表 tools/assets/species.meta.json（1d00e4c）；
-// 立绘仍为 design/characters/ 探索稿降采样占位（三张循环）。
+// species manifest（服务端内置版）：id/name/rarity 对齐 canonical 定稿表
+// tools/assets/species.meta.json；stages/silhouette 为 OSS 直链（见下方 ossBaseURL）。
+// 正式 manifest（version/eggs/species[id,name,rarity,stages,silhouette]）由素材线
+// Issue #4 管线产出，#14 签名 URL 版落地后由服务端动态下发替换。
 type speciesInfo struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
@@ -24,19 +23,36 @@ const (
 	rarityEpic   = "epic"
 )
 
+// 素材 URL 源（M3 过渡态）：全部为二进制内嵌本地资源。
+// OSS 直链暂不可用（现桶 403，且黄总已定裁迁移至新桶 pet-aibbm-assets，前缀将变），
+// 故 stages 用探索稿占位循环、silhouette 用预生成剪影内嵌（见 web/static/img/pets/）。
+// #14 签名 URL 版 manifest 落地后，仅替换本节两个函数为动态下发实现（键约定 pets/{id}/{1|2|3|silhouette}.png 不变）。
+
+// placeholderArt 是 M1 探索稿占位立绘（内嵌，恒可用）。
+var placeholderArt = []string{"/img/pets/robotcat.png", "/img/pets/pixeldog.png", "/img/pets/bunny.png"}
+
+// placeholderStages 返回第 i 个物种的三阶段占位（轮转，Lv1 图与 M1 一致）。
+func placeholderStages(i int) []string {
+	return []string{placeholderArt[i%3], placeholderArt[(i+1)%3], placeholderArt[(i+2)%3]}
+}
+
+func silhouetteURL(id string) string {
+	return "/img/pets/" + id + "/silhouette.png"
+}
+
 var speciesList = []speciesInfo{
-	{"cat", "电力猫", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
-	{"dog", "像素狗", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"bunny", "云绒兔", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
-	{"hamster", "芯片仓鼠", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
-	{"chick", "蛋壳鸡", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"penguin", "冰川企鹅", rarityCommon, []string{"/img/pets/bunny.png"}, ""},
-	{"koala", "电池考拉", rarityCommon, []string{"/img/pets/robotcat.png"}, ""},
-	{"axolotl", "六角恐龙", rarityCommon, []string{"/img/pets/pixeldog.png"}, ""},
-	{"fox", "星辰狐", rarityRare, []string{"/img/pets/bunny.png"}, ""},
-	{"panda", "太极熊猫", rarityRare, []string{"/img/pets/robotcat.png"}, ""},
-	{"dino", "机械恐龙", rarityRare, []string{"/img/pets/pixeldog.png"}, ""},
-	{"dragon", "神威小龙", rarityEpic, []string{"/img/pets/robotcat.png"}, ""},
+	{"cat", "电力猫", rarityCommon, placeholderStages(0), silhouetteURL("cat")},
+	{"dog", "像素狗", rarityCommon, placeholderStages(1), silhouetteURL("dog")},
+	{"bunny", "云绒兔", rarityCommon, placeholderStages(2), silhouetteURL("bunny")},
+	{"hamster", "芯片仓鼠", rarityCommon, placeholderStages(3), silhouetteURL("hamster")},
+	{"chick", "蛋壳鸡", rarityCommon, placeholderStages(4), silhouetteURL("chick")},
+	{"penguin", "冰川企鹅", rarityCommon, placeholderStages(5), silhouetteURL("penguin")},
+	{"koala", "电池考拉", rarityCommon, placeholderStages(6), silhouetteURL("koala")},
+	{"axolotl", "六角恐龙", rarityCommon, placeholderStages(7), silhouetteURL("axolotl")},
+	{"fox", "星辰狐", rarityRare, placeholderStages(8), silhouetteURL("fox")},
+	{"panda", "太极熊猫", rarityRare, placeholderStages(9), silhouetteURL("panda")},
+	{"dino", "机械恐龙", rarityRare, placeholderStages(10), silhouetteURL("dino")},
+	{"dragon", "神威小龙", rarityEpic, placeholderStages(11), silhouetteURL("dragon")},
 }
 
 // 稀有度权重：普通 70% / 稀有 25% / 史诗 5%（PRD M1）。

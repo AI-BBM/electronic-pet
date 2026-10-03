@@ -3,7 +3,7 @@
   "use strict";
 
   var TOKEN_KEY = "pet_token";
-  var views = ["join", "eggs", "hatch", "pet"];
+  var views = ["join", "eggs", "hatch", "pet", "dex", "wall"];
   var state = { token: null, pet: null, eggs: [], selectedEgg: null, renamed: false };
 
   function $(sel) { return document.querySelector(sel); }
@@ -189,6 +189,142 @@
       }
       renderPet(r.data.pet);
       state.renamed = true;
+    });
+  });
+
+  /* ---------- 宠物图鉴（M3） ---------- */
+  function loadDex() {
+    api("GET", "/api/dex").then(function (r) {
+      if (r.status === 401) { clearToken(); show("join"); return; }
+      if (r.status !== 200) { return; }
+      var grid = $("#dex-grid");
+      grid.innerHTML = "";
+      r.data.species.forEach(function (sp) {
+        var card = document.createElement("div");
+        card.className = "dex-card" + (sp.unlocked ? "" : " locked");
+        var main = document.createElement("img");
+        main.className = "main";
+        main.alt = sp.unlocked ? sp.name : "？？？";
+        main.src = sp.unlocked ? sp.stages[0] : sp.silhouette;
+        card.appendChild(main);
+
+        var name = document.createElement("div");
+        name.className = "dex-name";
+        name.textContent = sp.unlocked ? sp.name : "？？？";
+        card.appendChild(name);
+
+        var badge = document.createElement("span");
+        badge.className = "rarity-badge " + rarityClass(sp.rarity);
+        badge.textContent = RARITY_TEXT[sp.rarity] || sp.rarity;
+        card.appendChild(badge);
+
+        var owners = document.createElement("div");
+        owners.className = "owners";
+        owners.textContent = sp.unlocked ? sp.owners + " 人拥有" : "尚未解锁";
+        card.appendChild(owners);
+
+        if (sp.unlocked && sp.stages && sp.stages.length) {
+          var thumbs = document.createElement("div");
+          thumbs.className = "dex-thumbs";
+          sp.stages.forEach(function (u) {
+            var t = document.createElement("img");
+            t.src = u;
+            t.alt = "阶段";
+            t.title = "阶段形态";
+            thumbs.appendChild(t);
+          });
+          card.appendChild(thumbs);
+        }
+        grid.appendChild(card);
+      });
+      show("dex");
+    });
+  }
+
+  /* ---------- 班级墙（M3） ---------- */
+  function loadWall(sort) {
+    api("GET", "/api/class/wall?sort=" + sort).then(function (r) {
+      if (r.status === 401) { clearToken(); show("join"); return; }
+      if (r.status !== 200) { return; }
+      $("#wall-sort-points").className = "btn tiny " + (sort === "points" ? "primary" : "ghost");
+      $("#wall-sort-recent").className = "btn tiny " + (sort === "recent" ? "primary" : "ghost");
+      var list = $("#wall-list");
+      var profile = $("#wall-profile");
+      list.innerHTML = "";
+      profile.hidden = true;
+
+      r.data.wall.forEach(function (entry, i) {
+        var item = document.createElement("div");
+        item.className = "wall-item";
+        var rank = document.createElement("div");
+        rank.className = "wall-rank";
+        rank.textContent = String(i + 1);
+        item.appendChild(rank);
+
+        var img = document.createElement("img");
+        img.src = entry.imageUrl;
+        img.alt = entry.petName;
+        item.appendChild(img);
+
+        var meta = document.createElement("div");
+        meta.className = "wall-meta";
+        var n = document.createElement("div");
+        n.className = "n";
+        n.textContent = entry.petName + " · " + entry.studentName;
+        meta.appendChild(n);
+        var s = document.createElement("div");
+        s.className = "s";
+        s.textContent = "Lv" + entry.level + " " + entry.speciesName +
+          (entry.latestReason ? " · 最近：" + entry.latestReason : "");
+        meta.appendChild(s);
+        item.appendChild(meta);
+
+        var pts = document.createElement("div");
+        pts.className = "wall-pts";
+        pts.textContent = entry.points + " 分";
+        item.appendChild(pts);
+
+        item.addEventListener("click", function () { renderWallProfile(entry); });
+        list.appendChild(item);
+      });
+      show("wall");
+    });
+  }
+
+  function renderWallProfile(entry) {
+    var p = $("#wall-profile");
+    p.innerHTML = "";
+    var h = document.createElement("h3");
+    h.textContent = entry.petName + "（" + entry.studentName + "）";
+    p.appendChild(h);
+    var img = document.createElement("img");
+    img.src = entry.imageUrl;
+    img.alt = entry.petName;
+    img.style.width = "180px";
+    p.appendChild(img);
+    var lines = [
+      "种类：" + entry.speciesName,
+      "阶段：Lv" + entry.level,
+      "积分：" + entry.points + " 分",
+      entry.latestReason ? "最近加分理由：" + entry.latestReason : "还没有加分记录",
+    ];
+    lines.forEach(function (t) {
+      var d = document.createElement("div");
+      d.textContent = t;
+      p.appendChild(d);
+    });
+    p.hidden = false;
+    p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  $("#open-dex").addEventListener("click", loadDex);
+  $("#open-wall").addEventListener("click", function () { loadWall("points"); });
+  $("#wall-sort-points").addEventListener("click", function () { loadWall("points"); });
+  $("#wall-sort-recent").addEventListener("click", function () { loadWall("recent"); });
+  Array.prototype.forEach.call(document.querySelectorAll(".back-pet"), function (btn) {
+    btn.addEventListener("click", function () {
+      if (state.pet) { renderPet(state.pet); }
+      show("pet");
     });
   });
 
