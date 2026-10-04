@@ -740,6 +740,8 @@ func (s *srv) handleTeacherPoints(w http.ResponseWriter, r *http.Request) {
 
 // rosterEntry 是花名册单行（未领养学生 species/level/points 为零值）。
 type rosterEntry struct {
+	// ID 学生数字 id（#35 D1：卡片/详情的改名、删除等 id 型操作的数据源）。
+	ID           int64  `json:"id"`
 	StudentNo    string `json:"studentNo"`
 	Name         string `json:"name"`
 	Adopted      bool   `json:"adopted"`
@@ -761,7 +763,7 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
 	rows, err := s.db.Query(
-		`SELECT s.student_no, s.name, p.id, p.species_id, p.name, p.level, p.points,
+		`SELECT s.id, s.student_no, s.name, p.id, p.species_id, p.name, p.level, p.points,
 		        (SELECT MAX(created_at) FROM point_logs pl WHERE pl.pet_id = p.id)
 		 FROM students s LEFT JOIN pets p ON p.student_id = s.id
 		 WHERE s.class_id = ? AND s.deleted_at IS NULL
@@ -784,7 +786,7 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			level, points sql.NullInt64
 			lastPoints    sql.NullString
 		)
-		if err := rows.Scan(&e.StudentNo, &e.Name, &petID, &speciesID, &petName, &level, &points, &lastPoints); err != nil {
+		if err := rows.Scan(&e.ID, &e.StudentNo, &e.Name, &petID, &speciesID, &petName, &level, &points, &lastPoints); err != nil {
 			writeInternal(w, err, "scan roster")
 			return
 		}
