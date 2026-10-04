@@ -16,6 +16,8 @@
     .ok { color: #2e9e5b; }
     .err { color: #b00; font-size: 13px; }
     .ops button { margin-right: 6px; }
+    /* #32 W1：花名册/垃圾桶宠物缩略图 */
+    .pet-thumb { width: 36px; height: 36px; object-fit: contain; border-radius: 8px; vertical-align: middle; margin-right: 6px; }
     .view { display: none; }
     .view.active { display: block; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -91,6 +93,23 @@
     <div class="card">
       <h2>班级花名册</h2>
       <div class="row" style="margin-bottom:8px">
+        <label>发宠物种：
+          <select id="adopt-species">
+            <option value="">随机</option>
+            <option value="cat">电力猫</option>
+            <option value="dog">像素狗</option>
+            <option value="bunny">云绒兔</option>
+            <option value="hamster">芯片仓鼠</option>
+            <option value="chick">蛋壳鸡</option>
+            <option value="penguin">冰川企鹅</option>
+            <option value="koala">电池考拉</option>
+            <option value="axolotl">六角恐龙</option>
+            <option value="fox">星辰狐</option>
+            <option value="panda">太极熊猫</option>
+            <option value="dino">机械恐龙</option>
+            <option value="dragon">神威小龙</option>
+          </select>
+        </label>
         <button id="btn-refresh">刷新</button>
         <span id="work-msg" class="err"></span>
       </div>
@@ -113,7 +132,7 @@
       </div>
       <table>
         <thead>
-          <tr><th>学号</th><th>姓名</th><th>删除时间</th><th>操作</th></tr>
+          <tr><th>学号</th><th>姓名</th><th>宠物</th><th>删除时间</th><th>操作</th></tr>
         </thead>
         <tbody id="trash"></tbody>
       </table>
@@ -159,7 +178,7 @@
       $('btn-send-code').onclick = function () {
         $('reg-msg').textContent = '';
         api('POST', '/api/teacher/email-code', { email: $('reg-email').value.trim() }, false)
-          .then(function () { $('reg-msg').className = 'ok'; $('reg-msg').textContent = '验证码已发送（未配置邮件服务时见服务端日志）'; })
+          .then(function () { $('reg-msg').className = 'ok'; $('reg-msg').textContent = '验证码已发送至邮箱，请查收（10 分钟内有效）'; })
           .catch(function (e) { $('reg-msg').className = 'err'; $('reg-msg').textContent = e.message; });
       };
       $('btn-register').onclick = function () {
@@ -201,7 +220,7 @@
           $('roster').innerHTML = data.students.map(function (s) {
             studentIds[s.studentNo] = s.id;
             var pet = s.adopted
-              ? escapeHtml(s.speciesName) + '（' + escapeHtml(s.petName || s.speciesName) + '）'
+              ? '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">' + escapeHtml(s.speciesName) + '（' + escapeHtml(s.petName || s.speciesName) + '）'
               : '<span class="muted">未领养</span>';
             var last = s.lastPointsAt || '—';
             return '<tr data-no="' + escapeHtml(s.studentNo) + '" data-id="' + s.id + '">' +
@@ -226,7 +245,10 @@
         var no = tr.getAttribute('data-no');
         var id = tr.getAttribute('data-id');
         if (ev.target.classList.contains('do-adopt')) {
-          api('POST', '/api/teacher/adopt', { studentNo: no }, true)
+          var speciesId = $('adopt-species').value;
+          var adoptBody = { studentNo: no };
+          if (speciesId) { adoptBody.speciesId = speciesId; }
+          api('POST', '/api/teacher/adopt', adoptBody, true)
             .then(function () { $('work-msg').textContent = ''; loadRoster(); })
             .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
         } else if (ev.target.classList.contains('do-points')) {
@@ -269,12 +291,16 @@
       function loadTrash() {
         api('GET', '/api/teacher/trash', null, true).then(function (data) {
           $('trash').innerHTML = data.items.map(function (s) {
+            var petImg = s.imageUrl
+              ? '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="宠物" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">'
+              : '<span class="muted">无宠物</span>';
             return '<tr data-id="' + s.id + '">' +
               '<td data-label="学号">' + escapeHtml(s.studentNo) + '</td>' +
               '<td data-label="姓名">' + escapeHtml(s.name) + '</td>' +
+              '<td data-label="宠物">' + petImg + '</td>' +
               '<td data-label="删除时间" class="muted">' + escapeHtml(s.deletedAt) + '</td>' +
               '<td class="ops"><button class="do-restore">恢复</button></td></tr>';
-          }).join('') || '<tr><td colspan="4" class="muted">垃圾桶是空的</td></tr>';
+          }).join('') || '<tr><td colspan="5" class="muted">垃圾桶是空的</td></tr>';
         }).catch(function (e) { $('trash-msg').textContent = e.message; });
       }
       $('trash').addEventListener('click', function (ev) {

@@ -27,11 +27,14 @@ const (
 )
 
 // trashEntry 是垃圾桶单行（deletedAt 为格式化时间串）。
+// ImageURL/Silhouette：有宠为该宠当前阶段图/剪影直链，无宠为空串（#32 W1）。
 type trashEntry struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	StudentNo string `json:"studentNo"`
-	DeletedAt string `json:"deletedAt"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	StudentNo  string `json:"studentNo"`
+	DeletedAt  string `json:"deletedAt"`
+	ImageURL   string `json:"imageUrl"`
+	Silhouette string `json:"silhouette"`
 }
 
 type studentEntry struct {
@@ -436,16 +439,17 @@ func (s *srv) handleDeleteStudent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// handleTeacherTrash 垃圾桶列表（按删除时间倒序）。
+// handleTeacherTrash 垃圾桶列表（按删除时间倒序）。#32 W1：LEFT JOIN 宠物下发图片直链。
 func (s *srv) handleTeacherTrash(w http.ResponseWriter, r *http.Request) {
 	classID := r.Context().Value(ctxKeyTeacher).(int64)
 
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
 	rows, err := s.db.Query(
-		`SELECT id, name, student_no, deleted_at FROM students
-		 WHERE class_id = ? AND deleted_at IS NOT NULL
-		 ORDER BY deleted_at DESC`, classID,
+		`SELECT s.id, s.name, s.student_no, s.deleted_at, p.species_id, p.level
+		 FROM students s LEFT JOIN pets p ON p.student_id = s.id
+		 WHERE s.class_id = ? AND s.deleted_at IS NOT NULL
+		 ORDER BY s.deleted_at DESC`, classID,
 	)
 	if err != nil {
 		writeInternal(w, err, "list trash")
@@ -456,14 +460,22 @@ func (s *srv) handleTeacherTrash(w http.ResponseWriter, r *http.Request) {
 	items := []trashEntry{}
 	for rows.Next() {
 		var (
-			e         trashEntry
-			deletedAt int64
+			e           trashEntry
+			deletedAt   int64
+			speciesID   sql.NullString
+			level       sql.NullInt64
 		)
-		if err := rows.Scan(&e.ID, &e.Name, &e.StudentNo, &deletedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.StudentNo, &deletedAt, &speciesID, &level); err != nil {
 			writeInternal(w, err, "scan trash")
 			return
 		}
 		e.DeletedAt = time.Unix(deletedAt, 0).Format("2006-01-02 15:04:05")
+		if speciesID.Valid {
+			if sp, ok := speciesByID[speciesID.String]; ok {
+				e.ImageURL = speciesImageURL(sp, int(level.Int64))
+				e.Silhouette = sp.Silhouette
+			}
+		}
 		items = append(items, e)
 	}
 	if err := rows.Err(); err != nil {
@@ -514,9 +526,12 @@ func (s *srv) handleRestoreStudent(w http.ResponseWriter, r *http.Request) {
 
 type teacherAdoptRequest struct {
 	StudentNo string `json:"studentNo"`
+	// SpeciesID 可选（#32 W2）：为空/缺省按稀有度加权随机；指定时必须为
+	// canonical 物种 id 之一，否则 400（校验先于任何 DB 操作）。
+	SpeciesID string `json:"speciesId"`
 }
 
-// handleTeacherAdopt 代学生领蛋孵化：随机定种类（M1 规则），已领养 409。
+// handleTeacherAdopt 代学生领蛋孵化：带 speciesId 则指定物种，否则随机定种类（M1 规则），已领养 409。
 func (s *srv) handleTeacherAdopt(w http.ResponseWriter, r *http.Request) {
 	classID := r.Context().Value(ctxKeyTeacher).(int64)
 
@@ -533,6 +548,20 @@ func (s *srv) handleTeacherAdopt(w http.ResponseWriter, r *http.Request) {
 	if studentNo == "" {
 		writeJSON(w, http.StatusBadRequest, errJSON("studentNo 不能为空"))
 		return
+	}
+
+	// #32 W2：指定物种校验先于 DB（非法值不得触发任何查询/落库）。
+	speciesChosen := strings.TrimSpace(req.SpeciesID)
+	sp := speciesInfo{}
+	if speciesChosen != "" {
+		chosen, ok := speciesByID[speciesChosen]
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, errJSON("speciesId 不合法，必须是支持的物种之一"))
+			return
+		}
+		sp = chosen
+	} else {
+		sp = pickSpecies()
 	}
 
 	s.dbMu.Lock()
@@ -565,7 +594,6 @@ func (s *srv) handleTeacherAdopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sp := pickSpecies()
 	res, err := tx.Exec(
 		`INSERT INTO pets(student_id, species_id, name, level, points, egg_id) VALUES(?,?,?,?,?,?)`,
 		studentID, sp.ID, sp.Name, 1, 0, "teacher",
@@ -721,6 +749,9 @@ type rosterEntry struct {
 	Level        int    `json:"level"`
 	Points       int    `json:"points"`
 	LastPointsAt string `json:"lastPointsAt"`
+	// #32 W1：已领养为当前阶段图/剪影直链；未领养为空串。
+	ImageURL   string `json:"imageUrl"`
+	Silhouette string `json:"silhouette"`
 }
 
 // handleTeacherRoster 花名册（只读，仅在册学生）：姓名/学号、宠物（含宠物名）、积分、最近加分。
@@ -766,6 +797,9 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			if sp, ok := speciesByID[speciesID.String]; ok {
 				e.SpeciesID = sp.ID
 				e.SpeciesName = sp.Name
+				// #32 W1：按当前等级下发阶段图与剪影直链。
+				e.ImageURL = speciesImageURL(sp, e.Level)
+				e.Silhouette = sp.Silhouette
 			}
 		}
 		students = append(students, e)
