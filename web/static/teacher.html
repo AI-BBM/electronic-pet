@@ -26,6 +26,31 @@
     .nav-row button.active { background: #4c7dff; color: #fff; border: none; }
     form.add-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     form.add-form input { flex: 1; min-width: 120px; }
+    /* #35 M8：卡片墙 / 学生详情 / 带图选择器 */
+    .subview { display: none; }
+    .subview.active { display: block; }
+    .card-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .student-card { border: 1px solid #dfe5ec; border-radius: 10px; padding: 14px 12px; background: #fff; text-align: center; cursor: pointer; }
+    .student-card:hover { border-color: #4c7dff; }
+    .card-pet-img { width: 96px; height: 96px; object-fit: contain; }
+    .card-name { font-size: 20px; font-weight: 600; margin: 6px 0 2px; }
+    .card-meta { font-size: 13px; color: #8a97a6; }
+    .card-ops { margin-top: 8px; }
+    .card-ops button { margin: 2px; font-size: 13px; }
+    .detail-pet-img { width: 240px; height: 240px; object-fit: contain; display: block; margin: 0 auto; }
+    .detail-field { font-size: 15px; margin: 4px 0; }
+    .adopt-picker { display: none; position: fixed; inset: 0; background: rgba(36,50,68,0.45); z-index: 10; align-items: center; justify-content: center; }
+    .adopt-picker.open { display: flex; }
+    .adopt-picker-panel { background: #fff; border-radius: 10px; padding: 16px; max-width: 640px; width: 92%; max-height: 80vh; overflow: auto; }
+    .species-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .species-card { border: 1px solid #dfe5ec; border-radius: 10px; padding: 10px 6px; text-align: center; cursor: pointer; background: #fff; }
+    .species-card:hover { border-color: #4c7dff; }
+    .species-card img { width: 72px; height: 72px; object-fit: contain; }
+    .species-card .sp-name { font-size: 14px; margin: 4px 0 2px; }
+    .rarity-badge { display: inline-block; font-size: 12px; color: #fff; border-radius: 8px; padding: 1px 8px; }
+    .rarity-common { background: #8a97a6; }
+    .rarity-rare { background: #2f80ed; }
+    .rarity-epic { background: #f5a623; }
     /* M5 窄屏适配（<1024px）：表格降级为卡片式列表，触屏目标 ≥44px */
     @media (max-width: 1023px) {
       body { margin: 0 auto; padding: 12px; }
@@ -41,6 +66,9 @@
       td.ops { justify-content: flex-end; }
       td.ops button { min-width: 88px; margin-left: 8px; margin-top: 6px; }
       .row input, form.add-form input { min-width: 100%; }
+      .card-wall { grid-template-columns: 1fr; }
+      .detail-pet-img { max-width: 100%; }
+      .species-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -93,32 +121,42 @@
     <div class="card">
       <h2>班级花名册</h2>
       <div class="row" style="margin-bottom:8px">
-        <label>发宠物种：
-          <select id="adopt-species">
-            <option value="">随机</option>
-            <option value="cat">电力猫</option>
-            <option value="dog">像素狗</option>
-            <option value="bunny">云绒兔</option>
-            <option value="hamster">芯片仓鼠</option>
-            <option value="chick">蛋壳鸡</option>
-            <option value="penguin">冰川企鹅</option>
-            <option value="koala">电池考拉</option>
-            <option value="axolotl">六角恐龙</option>
-            <option value="fox">星辰狐</option>
-            <option value="panda">太极熊猫</option>
-            <option value="dino">机械恐龙</option>
-            <option value="dragon">神威小龙</option>
-          </select>
-        </label>
+        <button id="btn-view-toggle">表格视图</button>
         <button id="btn-refresh">刷新</button>
         <span id="work-msg" class="err"></span>
       </div>
-      <table>
-        <thead>
-          <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>最近加分</th><th>操作</th></tr>
-        </thead>
-        <tbody id="roster"></tbody>
-      </table>
+      <!-- #35 M8 U1：默认卡片墙 -->
+      <div id="card-wall" class="subview active"></div>
+      <!-- 表格视图（次要入口，M5/M7 锚点保留） -->
+      <div id="roster-table" class="subview">
+        <table>
+          <thead>
+            <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>最近加分</th><th>操作</th></tr>
+          </thead>
+          <tbody id="roster"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 学生详情视图（#35 M8 U2） -->
+  <div class="view" id="detail-view">
+    <div class="card">
+      <button id="detail-back">← 返回</button>
+      <img id="detail-pet-img" class="detail-pet-img" src="" alt="宠物">
+      <h2 id="detail-student-name" style="text-align:center"></h2>
+      <p class="muted" id="detail-student-no" style="text-align:center"></p>
+      <p class="detail-field">宠物名：<span id="detail-pet-name"></span></p>
+      <p class="detail-field">种类：<span id="detail-species-name"></span></p>
+      <p class="detail-field">等级：<span id="detail-level"></span></p>
+      <p class="detail-field">积分：<span id="detail-points"></span></p>
+      <div class="row">
+        <button id="detail-adopt" class="do-adopt">发宠物</button>
+        <button id="detail-points-btn">加分</button>
+        <button id="detail-rename">改名</button>
+        <button id="detail-delete">删除</button>
+      </div>
+      <span id="detail-msg" class="err"></span>
     </div>
   </div>
 
@@ -140,12 +178,108 @@
     </div>
   </div>
 
+  <!-- 发宠物带图选择器（#35 M8 U3） -->
+  <div class="adopt-picker" id="adopt-picker">
+    <div class="adopt-picker-panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <strong>选择宠物物种</strong>
+        <button id="adopt-close">关闭</button>
+      </div>
+      <div class="species-grid">
+        <div class="species-card" data-species="">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/eggs/common.png" alt="随机">
+          <div class="sp-name">随机</div>
+        </div>
+        <div class="species-card" data-species="cat">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/cat/2.png" alt="电力猫">
+          <div class="sp-name">电力猫</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="dog">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/dog/2.png" alt="像素狗">
+          <div class="sp-name">像素狗</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="bunny">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/bunny/2.png" alt="云绒兔">
+          <div class="sp-name">云绒兔</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="hamster">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/hamster/2.png" alt="芯片仓鼠">
+          <div class="sp-name">芯片仓鼠</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="chick">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/chick/2.png" alt="蛋壳鸡">
+          <div class="sp-name">蛋壳鸡</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="penguin">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/penguin/2.png" alt="冰川企鹅">
+          <div class="sp-name">冰川企鹅</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="koala">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/koala/2.png" alt="电池考拉">
+          <div class="sp-name">电池考拉</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="axolotl">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/axolotl/2.png" alt="六角恐龙">
+          <div class="sp-name">六角恐龙</div>
+          <span class="rarity-badge rarity-common">普通</span>
+        </div>
+        <div class="species-card" data-species="fox">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/fox/2.png" alt="星辰狐">
+          <div class="sp-name">星辰狐</div>
+          <span class="rarity-badge rarity-rare">稀有</span>
+        </div>
+        <div class="species-card" data-species="panda">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/panda/2.png" alt="太极熊猫">
+          <div class="sp-name">太极熊猫</div>
+          <span class="rarity-badge rarity-rare">稀有</span>
+        </div>
+        <div class="species-card" data-species="dino">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/dino/2.png" alt="机械恐龙">
+          <div class="sp-name">机械恐龙</div>
+          <span class="rarity-badge rarity-rare">稀有</span>
+        </div>
+        <div class="species-card" data-species="dragon">
+          <img src="https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/dragon/2.png" alt="神威小龙">
+          <div class="sp-name">神威小龙</div>
+          <span class="rarity-badge rarity-epic">史诗</span>
+        </div>
+      </div>
+      <!-- M7 兼容取值器：隐藏 select，承载 adopt-species 锚点 -->
+      <select id="adopt-species" style="display:none">
+        <option value="">随机</option>
+        <option value="cat">电力猫</option>
+        <option value="dog">像素狗</option>
+        <option value="bunny">云绒兔</option>
+        <option value="hamster">芯片仓鼠</option>
+        <option value="chick">蛋壳鸡</option>
+        <option value="penguin">冰川企鹅</option>
+        <option value="koala">电池考拉</option>
+        <option value="axolotl">六角恐龙</option>
+        <option value="fox">星辰狐</option>
+        <option value="panda">太极熊猫</option>
+        <option value="dino">机械恐龙</option>
+        <option value="dragon">神威小龙</option>
+      </select>
+    </div>
+  </div>
+
   <script>
     (function () {
       'use strict';
       var $ = function (id) { return document.getElementById(id); };
       var TOKEN_KEY = 'teacher_token';
-      var studentIds = {}; // studentNo -> id（行内改宠物名用）
+      var studentIds = {}; // studentNo -> id（行内操作用）
+      var rosterCache = {}; // studentNo -> roster 行（#35 M8 详情数据源）
+      var EGG_COMMON = 'https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/eggs/common.png';
+      var adoptTargetNo = ''; // 发宠目标学生（选择器确认后提交）
+      var detailNo = '';      // 当前详情学生
 
       function api(method, path, body, needsAuth) {
         var headers = { 'Content-Type': 'application/json' };
@@ -166,11 +300,11 @@
       }
 
       function show(view) {
-        ['login-view', 'register-view', 'work-view', 'trash-view'].forEach(function (id) {
+        ['login-view', 'register-view', 'work-view', 'detail-view', 'trash-view'].forEach(function (id) {
           $(id).classList.toggle('active', id === view);
         });
-        $('main-nav').style.display = (view === 'work-view' || view === 'trash-view') ? '' : 'none';
-        $('nav-work').classList.toggle('active', view === 'work-view');
+        $('main-nav').style.display = (view === 'work-view' || view === 'detail-view' || view === 'trash-view') ? '' : 'none';
+        $('nav-work').classList.toggle('active', view === 'work-view' || view === 'detail-view');
         $('nav-trash').classList.toggle('active', view === 'trash-view');
       }
 
@@ -210,17 +344,43 @@
       };
       $('btn-logout').onclick = function () {
         localStorage.removeItem(TOKEN_KEY);
+        detailNo = '';
         show('login-view');
       };
 
-      // ---------- 花名册 ----------
+      // ---------- 花名册：卡片墙 + 表格双渲染 ----------
+      function petImgTag(s) {
+        if (!s.adopted) {
+          return '<img class="pet-thumb" src="' + EGG_COMMON + '" alt="未领养">';
+        }
+        return '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">';
+      }
+
       function loadRoster() {
-        api('GET', '/api/teacher/roster', null, true).then(function (data) {
+        return api('GET', '/api/teacher/roster', null, true).then(function (data) {
           studentIds = {};
-          $('roster').innerHTML = data.students.map(function (s) {
+          rosterCache = {};
+          var cards = data.students.map(function (s) {
             studentIds[s.studentNo] = s.id;
+            rosterCache[s.studentNo] = s;
+            var img = s.adopted
+              ? '<img class="card-pet-img" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">'
+              : '<img class="card-pet-img" src="' + EGG_COMMON + '" alt="未领养">';
+            var ops = s.adopted
+              ? '<button class="do-points">加分</button><button class="do-rename">改名</button>'
+              : '<button class="do-adopt">发宠物</button>';
+            return '<div class="student-card" data-no="' + escapeHtml(s.studentNo) + '">' +
+              img +
+              '<div class="card-name">' + escapeHtml(s.name) + '</div>' +
+              '<div class="card-meta">' + escapeHtml(s.studentNo) + (s.adopted ? ' · Lv' + s.level + ' · ' + s.points + ' 分' : ' · 未领养') + '</div>' +
+              '<div class="card-ops">' + ops + '<button class="do-delete">删除</button></div>' +
+              '</div>';
+          }).join('');
+          $('card-wall').innerHTML = cards;
+
+          $('roster').innerHTML = data.students.map(function (s) {
             var pet = s.adopted
-              ? '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">' + escapeHtml(s.speciesName) + '（' + escapeHtml(s.petName || s.speciesName) + '）'
+              ? petImgTag(s) + escapeHtml(s.speciesName) + '（' + escapeHtml(s.petName || s.speciesName) + '）'
               : '<span class="muted">未领养</span>';
             var last = s.lastPointsAt || '—';
             return '<tr data-no="' + escapeHtml(s.studentNo) + '" data-id="' + s.id + '">' +
@@ -238,45 +398,141 @@
         }).catch(function (e) { $('work-msg').textContent = e.message; });
       }
 
-      // 行内操作：发宠物 / 加分 / 改宠物名 / 删除
+      // 通用操作（卡片墙 / 表格 / 详情共用）：按 studentNo + id 执行
+      function doAdopt(no) {
+        adoptTargetNo = no;
+        $('adopt-picker').classList.add('open');
+      }
+      function doPoints(no) {
+        var reason = window.prompt('加分理由：');
+        if (!reason) return;
+        var value = parseInt(window.prompt('分值（1-50）：', '1'), 10);
+        if (!value) return;
+        var requestId = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+        api('POST', '/api/teacher/points', { studentNo: no, reason: reason, value: value, requestId: requestId }, true)
+          .then(function (r) {
+            $('work-msg').textContent = '';
+            $('detail-msg').textContent = '';
+            window.alert(r.levelUp ? '加分成功，触发进化！Lv' + r.level : '加分成功（+' + value + '）');
+            loadRoster().then(function () { if (detailNo === no) { openDetail(no); } });
+          })
+          .catch(function (e) {
+            if (detailNo === no) { $('detail-msg').textContent = e.message; }
+            else { $('work-msg').textContent = no + ': ' + e.message; }
+          });
+      }
+      function doRename(no) {
+        var s = rosterCache[no] || {};
+        var name = window.prompt('给宠物改名（可随时修改）：');
+        if (!name) return;
+        api('POST', '/api/teacher/pets/' + s.id + '/name', { name: name }, true)
+          .then(function () {
+            loadRoster().then(function () { if (detailNo === no) { openDetail(no); } });
+          })
+          .catch(function (e) {
+            if (detailNo === no) { $('detail-msg').textContent = e.message; }
+            else { $('work-msg').textContent = no + ': ' + e.message; }
+          });
+      }
+      function doDelete(no) {
+        var s = rosterCache[no] || {};
+        if (!window.confirm('确定删除学生 ' + no + '？其宠物与流水将进入垃圾桶（3 个月内可恢复）。')) return;
+        api('DELETE', '/api/teacher/students/' + s.id, null, true)
+          .then(function () {
+            if (detailNo === no) { show('work-view'); detailNo = ''; }
+            loadRoster();
+          })
+          .catch(function (e) {
+            if (detailNo === no) { $('detail-msg').textContent = e.message; }
+            else { $('work-msg').textContent = no + ': ' + e.message; }
+          });
+      }
+
+      // 选择器确认后的实际发宠提交（#32 W2 契约：随机不带 speciesId）
+      function submitAdopt(no, speciesId) {
+        var adoptBody = { studentNo: no };
+        if (speciesId) { adoptBody.speciesId = speciesId; }
+        return api('POST', '/api/teacher/adopt', adoptBody, true)
+          .then(function () {
+            $('adopt-picker').classList.remove('open');
+            $('work-msg').textContent = '';
+            $('detail-msg').textContent = '';
+            loadRoster().then(function () { if (detailNo === no) { openDetail(no); } });
+          })
+          .catch(function (e) {
+            $('adopt-picker').classList.remove('open');
+            if (detailNo === no) { $('detail-msg').textContent = no + ': ' + e.message; }
+            else { $('work-msg').textContent = no + ': ' + e.message; }
+          });
+      }
+
+      // 卡片墙点击：按钮区走操作，其余区域进详情
+      $('card-wall').addEventListener('click', function (ev) {
+        var card = ev.target.closest('.student-card');
+        if (!card) return;
+        var no = card.getAttribute('data-no');
+        if (ev.target.classList.contains('do-adopt')) { doAdopt(no); return; }
+        if (ev.target.classList.contains('do-points')) { doPoints(no); return; }
+        if (ev.target.classList.contains('do-rename')) { doRename(no); return; }
+        if (ev.target.classList.contains('do-delete')) { doDelete(no); return; }
+        openDetail(no);
+      });
+
+      // 表格行操作（表格视图保留）
       $('roster').addEventListener('click', function (ev) {
         var tr = ev.target.closest('tr');
         if (!tr) return;
         var no = tr.getAttribute('data-no');
-        var id = tr.getAttribute('data-id');
-        if (ev.target.classList.contains('do-adopt')) {
-          var speciesId = $('adopt-species').value;
-          var adoptBody = { studentNo: no };
-          if (speciesId) { adoptBody.speciesId = speciesId; }
-          api('POST', '/api/teacher/adopt', adoptBody, true)
-            .then(function () { $('work-msg').textContent = ''; loadRoster(); })
-            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
-        } else if (ev.target.classList.contains('do-points')) {
-          var reason = window.prompt('加分理由：');
-          if (!reason) return;
-          var value = parseInt(window.prompt('分值（1-50）：', '1'), 10);
-          if (!value) return;
-          var requestId = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
-          api('POST', '/api/teacher/points', { studentNo: no, reason: reason, value: value, requestId: requestId }, true)
-            .then(function (r) {
-              $('work-msg').textContent = '';
-              window.alert(r.levelUp ? '加分成功，触发进化！Lv' + r.level : '加分成功（+' + value + '）');
-              loadRoster();
-            })
-            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
-        } else if (ev.target.classList.contains('do-rename')) {
-          var name = window.prompt('给宠物改名（可随时修改）：');
-          if (!name) return;
-          api('POST', '/api/teacher/pets/' + id + '/name', { name: name }, true)
-            .then(function () { loadRoster(); })
-            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
-        } else if (ev.target.classList.contains('do-delete')) {
-          if (!window.confirm('确定删除学生 ' + no + '？其宠物与流水将进入垃圾桶（3 个月内可恢复）。')) return;
-          api('DELETE', '/api/teacher/students/' + id, null, true)
-            .then(function () { loadRoster(); })
-            .catch(function (e) { $('work-msg').textContent = no + ': ' + e.message; });
-        }
+        if (ev.target.classList.contains('do-adopt')) { doAdopt(no); }
+        else if (ev.target.classList.contains('do-points')) { doPoints(no); }
+        else if (ev.target.classList.contains('do-rename')) { doRename(no); }
+        else if (ev.target.classList.contains('do-delete')) { doDelete(no); }
       });
+
+      // ---------- 学生详情（#35 M8 U2） ----------
+      function openDetail(no) {
+        var s = rosterCache[no];
+        if (!s) return;
+        detailNo = no;
+        $('detail-student-name').textContent = s.name;
+        $('detail-student-no').textContent = '学号 ' + s.studentNo;
+        if (s.adopted) {
+          $('detail-pet-img').src = s.imageUrl;
+          $('detail-pet-img').onerror = function () { this.onerror = null; this.src = s.silhouette; };
+          $('detail-pet-name').textContent = s.petName || s.speciesName;
+          $('detail-species-name').textContent = s.speciesName;
+          $('detail-level').textContent = 'Lv' + s.level;
+          $('detail-points').textContent = s.points + ' 分';
+        } else {
+          $('detail-pet-img').src = EGG_COMMON;
+          $('detail-pet-img').onerror = null;
+          $('detail-pet-name').textContent = '未领养';
+          $('detail-species-name').textContent = '—';
+          $('detail-level').textContent = '—';
+          $('detail-points').textContent = '—';
+        }
+        $('detail-adopt').style.display = s.adopted ? 'none' : '';
+        $('detail-msg').textContent = '';
+        show('detail-view');
+      }
+      $('detail-back').onclick = function () { detailNo = ''; show('work-view'); loadRoster(); };
+      $('detail-adopt').onclick = function () { doAdopt(detailNo); };
+      $('detail-points-btn').onclick = function () { doPoints(detailNo); };
+      $('detail-rename').onclick = function () { doRename(detailNo); };
+      $('detail-delete').onclick = function () { doDelete(detailNo); };
+
+      // ---------- 发宠物选择器（#35 M8 U3） ----------
+      $('adopt-picker').addEventListener('click', function (ev) {
+        var card = ev.target.closest('.species-card');
+        if (card) {
+          var speciesId = card.getAttribute('data-species');
+          $('adopt-species').value = speciesId;
+          submitAdopt(adoptTargetNo, speciesId);
+          return;
+        }
+        if (ev.target.id === 'adopt-picker') { $('adopt-picker').classList.remove('open'); }
+      });
+      $('adopt-close').onclick = function () { $('adopt-picker').classList.remove('open'); };
 
       // 新增学生
       $('add-form').addEventListener('submit', function (e) {
@@ -312,6 +568,14 @@
           .catch(function (e) { $('trash-msg').textContent = e.message; });
       });
       $('btn-trash-refresh').onclick = loadTrash;
+
+      // ---------- 视图切换 ----------
+      $('btn-view-toggle').onclick = function () {
+        var wallActive = $('card-wall').classList.contains('active');
+        $('card-wall').classList.toggle('active', !wallActive);
+        $('roster-table').classList.toggle('active', wallActive);
+        this.textContent = wallActive ? '卡片视图' : '表格视图';
+      };
 
       $('nav-work').onclick = function () { show('work-view'); loadRoster(); };
       $('nav-trash').onclick = function () { show('trash-view'); loadTrash(); };
