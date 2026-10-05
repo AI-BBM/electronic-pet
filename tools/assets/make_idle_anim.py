@@ -29,32 +29,44 @@ def frame_diff(a: Image.Image, b: Image.Image) -> float:
     return sum(means) / 3.0
 
 
-def build_frame(base: Image.Image, phase: float, sway_px: float,
-                bounce_px: float, rot_deg: float, w: int, h: int) -> Image.Image:
-    rot = base.rotate(rot_deg, resample=Image.BICUBIC, center=(w / 2, h - 2))
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    out.paste(rot, (int(round(sway_px)), int(round(-bounce_px))), rot)
-    return out
+def build_wave_frame(base: Image.Image, angle_deg: float, pivot, window,
+                     feather: int) -> Image.Image:
+    """绕 pivot 旋转 angle 度，仅在羽化窗口内与原图混合（挥手区域）。"""
+    from PIL import ImageFilter
+    warped = base.rotate(angle_deg, resample=Image.BICUBIC, center=pivot)
+    mask = Image.new("L", base.size, 0)
+    from PIL import ImageDraw
+    dd = ImageDraw.Draw(mask)
+    dd.rectangle(window, fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(feather))
+    frame = base.copy()
+    frame.paste(warped, (0, 0), mask)
+    return frame
 
 
-def tri(f: int, frames: int) -> float:
-    """三角波：-1 → +1 → -1 线性往返（匀速，相邻帧位移恒定）。"""
-    p = (f % frames) / frames
-    return 4.0 * p - 1.0 if p < 0.5 else 3.0 - 4.0 * p
-
-
-def gen_frames(base: Image.Image, frames: int, sway: float, bounce: float,
-               rot: float) -> list:
-    """三角波匀速摇摆+蹦跳（#37 返工 R1：每对相邻帧位移恒定且明显）。"""
+def gen_frames(base: Image.Image, frames: int, wave_deg: float):
+    """打招呼挥手：一侧爪/耳区域绕肩轴左右挥动 2 次。"""
     w, h = base.size
-    out = []
+    bbox = base.getchannel("A").getbbox()
+    if not bbox:
+        raise ValueError("基准图主体为空（alpha 全透明）")
+    left, top, right, bottom = bbox
+    sub_h = bottom - top
+    window = (right - int((right - left) * 0.62), top,
+              right - 2, top + int(sub_h * 0.42))
+    pivot = (window[0] + 6, window[3])
+    frames_out = []
     for f in range(frames):
-        s = tri(f, frames)          # -1..+1
-        dx = sway * s
-        dy = -abs(bounce * s)       # 上下各半程（|s| 0→1→0）
-        dr = rot * s
-        out.append(build_frame(base, f, dx, dy, dr, w, h))
-    return out
+        ph = 2 * math.pi * (2 * f / frames)
+        angle = wave_deg * math.sin(ph)
+        frames_out.append(build_wave_frame(base, angle, pivot, window, 12))
+    return frames_out
+
+
+def min_consecutive_diff(frames: list) -> float:
+    n = len(frames)
+    vals = [frame_diff(frames[i], frames[(i + 1) % n]) for i in range(n)]
+    return min(vals)
 
 
 def min_consecutive_diff(frames: list) -> float:
@@ -70,40 +82,31 @@ def main():
     ap.add_argument("--frames", type=int, default=8, help="帧数（默认 8）")
     ap.add_argument("--ms", type=int, default=110, help="每帧时长毫秒（默认 110）")
     ap.add_argument("--quality", type=int, default=80, help="WebP 质量（默认 80）")
+    ap.add_argument("--wave-deg", type=float, default=18.0, help="挥手摆角度（默认 18）")
     ap.add_argument("--min-diff", type=float, default=15.0,
                     help="帧间平均差下限 0-255（默认 15，#37 R1）")
     args = ap.parse_args()
 
     base = Image.open(args.src).convert("RGBA")
-    w, h = base.size
-    sway = max(18.0, round(w * 0.06))      # ≥6% 画布宽
-    bounce = max(18.0, round(h * 0.06))    # ≥6% 画布高
-    rot = 6.0                              # 底部为轴 ±6°
     frames_n = args.frames
+    wave_deg = args.wave_deg
 
-    max_sway = w * 0.30
-    max_bounce = h * 0.30
-    max_rot = 25.0
     scale = 1.0
     ok = False
     for attempt in range(5):
-        frames = gen_frames(base, frames_n,
-                            min(sway * scale, max_sway),
-                            min(bounce * scale, max_bounce),
-                            min(rot * scale, max_rot))
+        frames = gen_frames(base, frames_n, wave_deg * scale)
         md = min_consecutive_diff(frames)
-        print(f"attempt {attempt + 1}: sway={min(sway * scale, max_sway):.0f}px "
-              f"bounce={min(bounce * scale, max_bounce):.0f}px "
-              f"rot={min(rot * scale, max_rot):.1f}° min-consecutive-diff={md:.1f}/255")
+        print(f"attempt {attempt + 1}: wave={wave_deg * scale:.1f}° "
+              f"min-consecutive-diff={md:.1f}/255")
         if md >= args.min_diff:
             ok = True
             break
-        scale *= 1.8
+        scale *= 1.7
     if not ok:
         print("ERROR: 5 轮放大后仍不达标", file=sys.stderr)
         return 2
 
-    seq = frames  # 三角波 8 帧首尾自然衔接（相邻位移恒定），无需追加重复帧
+    seq = frames
     seq[0].save(
         args.out, save_all=True, append_images=seq[1:], duration=args.ms,
         loop=0, format="WEBP", quality=args.quality, method=4,
@@ -111,8 +114,9 @@ def main():
     size = os.path.getsize(args.out)
     print(f"written {args.out}: {len(seq)} frames, {size} bytes")
     if size > 300 * 1024:
-        print("WARNING: 超过 300KB 验收线，建议降 quality", file=sys.stderr)
+        print("WARNING: 超过 300KB 验收线", file=sys.stderr)
         return 2
+
     return 0
 
 
