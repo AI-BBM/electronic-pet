@@ -195,3 +195,26 @@ inpaint**，身体一致性是像素级物理保证而非"看着差不多"。
   eat 喂食 / spin 升级进化 / bow 颁奖致谢），待 PM/黄总定稿后冻结；
 - 外观锚定模板沿用 gen_wave_frames.APPEARANCE（bunny/chick 全 6 阶段手调
   定稿），新物种需补该表并连同 --card 实卡验收。
+
+## v7 三步工艺（#37 收尾版，黄总 2026-10-05 直拍：多角度角色图→16 动作图→裁剪超分）
+
+```
+① 多角度角色图   batch_angles.py    EDIT d1.0，原图参考 → 左/右/背三视图
+                                    （6 只 × 3 = 18 张，角色资产锁定）
+② 16 动作帧      batch_actions.py   正面+左侧+右侧 三图多参考（TextEncodeQwenImage21
+                                    autogrow），逐帧显式姿态短语，固定 seed；
+                                    16 帧梯度：站姿→抬→挥左/右×4→落→站姿
+③ 裁剪+超分      assemble_v7.py     主体裁剪 → RealESRGAN_x2plus ×2 → 脚底锚定
+                                    对齐 → 抠透明 → 16 帧 200ms WebP ≤300KB
+```
+
+要点（实测教训）：
+- 多参考锁形象是帧间一致性的关键（对比 v5 单参考整帧重绘的漂移）；
+- ESRGAN 后必须**脚底锚定**（主体高度归一+底边中心对齐），禁止整帧强 resize（变形）；
+- 收尾帧"放下肢体"提示词易引发**身体转身漂移**——三只鸡的 f12-15 改用抬肢体段
+  逆序复用（f12←f03, f13←f02, f14←f01, f15←f00），对称回落、循环闭合，report
+  closing_reuse 字段如实记录；
+- WebP 用 method=6；装甲类主体 16 帧需 448px 帧高 + q≥25 才能进 300KB。
+
+证据：wave-evidence/v7/ = 角色图全览 contact sheet + 逐帧 prompt/seed（meta_actions）
++ 挑帧与装配参数（report_v7_*）。bunny_1 收尾 4 帧经 4-seed 挑优（s202 保留项圈金牌）。
