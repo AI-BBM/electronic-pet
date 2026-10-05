@@ -1,0 +1,29 @@
+{
+ "pet": "bunny_3",
+ "ms": 200,
+ "sources": [
+  "orig",
+  "pose1_s68",
+  "pose2_s68",
+  "mirror-inside(pose1_s68)",
+  "pose1_s68",
+  "mirror-inside(pose2_s68)",
+  "pose2_s68",
+  "orig"
+ ],
+ "outside_diffs": [
+  0.0,
+  0.027,
+  0.027,
+  0.017,
+  0.027,
+  0.014,
+  0.027,
+  0.0
+ ],
+ "webp": {
+  "path": "C:/Users/hxx/AppData/Local/Temp/m9v6\\out\\bunny_3-anim.webp",
+  "bytes": 89816,
+  "quality": 85
+ }
+}

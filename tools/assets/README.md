@@ -143,3 +143,24 @@ OSS 静态图合成白底参考图
 探针定案参数（详见 gen_wave_frames.py 头注）：EDIT latent + denoise=1.0 是唯一
 同时满足姿态变化/白底/帧间一致的路线；该 latent 低重绘（denoise<1）输出噪声糊，
 标准 VAEEncode img2img 结构变化（抬爪）出不来。
+
+## v6 inpaint 工艺（2026-10-05 黄总定版，覆盖 v5）
+
+黄总验收 v5 结论"人物一致性没有保持"→ v6：**原图保底 + 仅手臂/耳/翅区域
+inpaint**，身体一致性是像素级物理保证而非"看着差不多"。
+
+```
+原静态图 + 运动包络遮罩（叠图人工校准，bunny=右耳、chick=右翅/左臂）
+  → inpaint_client.py    ComfyUI Qwen-Image 2.1 inpaint：VAEEncode(原图)
+                         → SetLatentNoiseMask → 采样（denoise=1.0）
+                         → ImageCompositeMasked 遮罩外强制回贴原图像素
+  → batch_v6.py          6 只 × 2 关键位（内摆/外摆）× 2 seed
+  → assemble_v6.py       帧序列 = [原图, A, B, 镜像内(A), A, 镜像内(B), B, 原图]
+                         （镜像仅限遮罩内——整帧翻转会破坏遮罩外一致性）
+                         → 逐帧遮罩外差值自检 <2/255 → 8 帧 200ms WebP
+  → upload_oss 定向覆盖  pets/{species}/{stage}-anim.webp
+```
+
+交付证据：wave-evidence/v6/{pet}/ = mask.png（运动包络遮罩）+ 逐帧遮罩外
+差值自测报告；wave-evidence/v6/meta_v6.json = 逐帧 prompt/seed/采样参数。
+实测：全帧遮罩外差 0~0.27/255（限值 2），身体/脸/服饰逐像素不变。

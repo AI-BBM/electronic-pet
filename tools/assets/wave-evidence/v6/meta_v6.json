@@ -1,0 +1,222 @@
+{
+ "bunny_2_pose1_s68": {
+  "pet": "bunny_2",
+  "pose": "pose1",
+  "seed": 68,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear bent and tilted toward the left toward the middle of its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_2_pose1_s101": {
+  "pet": "bunny_2",
+  "pose": "pose1",
+  "seed": 101,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear bent and tilted toward the left toward the middle of its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_2_pose2_s68": {
+  "pet": "bunny_2",
+  "pose": "pose2",
+  "seed": 68,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear leaning outward to the right away from its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_2_pose2_s101": {
+  "pet": "bunny_2",
+  "pose": "pose2",
+  "seed": 101,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear leaning outward to the right away from its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_3_pose1_s68": {
+  "pet": "bunny_3",
+  "pose": "pose1",
+  "seed": 68,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear bent and tilted toward the left toward the middle of its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_3_pose1_s101": {
+  "pet": "bunny_3",
+  "pose": "pose1",
+  "seed": 101,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear bent and tilted toward the left toward the middle of its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_3_pose2_s68": {
+  "pet": "bunny_3",
+  "pose": "pose2",
+  "seed": 68,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear leaning outward to the right away from its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "bunny_3_pose2_s101": {
+  "pet": "bunny_3",
+  "pose": "pose2",
+  "seed": 101,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, its right-side ear leaning outward to the right away from its head like waving, everything else stays exactly the same, plain pure white background",
+  "mask": "bunny_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_1_pose1_s68": {
+  "pet": "chick_1",
+  "pose": "pose1",
+  "seed": 68,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side wing raised up beside its head, wing tip tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_1_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_1_pose1_s101": {
+  "pet": "chick_1",
+  "pose": "pose1",
+  "seed": 101,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side wing raised up beside its head, wing tip tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_1_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_1_pose2_s68": {
+  "pet": "chick_1",
+  "pose": "pose2",
+  "seed": 68,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side wing raised up beside its head, wing tip tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_1_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_1_pose2_s101": {
+  "pet": "chick_1",
+  "pose": "pose2",
+  "seed": 101,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side wing raised up beside its head, wing tip tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_1_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_2_pose1_s68": {
+  "pet": "chick_2",
+  "pose": "pose1",
+  "seed": 68,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side mechanical wing raised up beside its head tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_2_pose1_s101": {
+  "pet": "chick_2",
+  "pose": "pose1",
+  "seed": 101,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side mechanical wing raised up beside its head tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_2_pose2_s68": {
+  "pet": "chick_2",
+  "pose": "pose2",
+  "seed": 68,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side mechanical wing raised up beside its head tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_2_pose2_s101": {
+  "pet": "chick_2",
+  "pose": "pose2",
+  "seed": 101,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, its right-side mechanical wing raised up beside its head tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_2_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_3_pose1_s68": {
+  "pet": "chick_3",
+  "pose": "pose1",
+  "seed": 68,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, its left-side arm raised up beside its helmet tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_3_pose1_s101": {
+  "pet": "chick_3",
+  "pose": "pose1",
+  "seed": 101,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, its left-side arm raised up beside its helmet tilted to the left like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_3_pose2_s68": {
+  "pet": "chick_3",
+  "pose": "pose2",
+  "seed": 68,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, its left-side arm raised up beside its helmet tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ },
+ "chick_3_pose2_s101": {
+  "pet": "chick_3",
+  "pose": "pose2",
+  "seed": 101,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, its left-side arm raised up beside its helmet tilted to the right like waving hello, everything else stays exactly the same, plain pure white background",
+  "mask": "chick_3_mask.png",
+  "mode": "inpaint denoise=1.0 ImageCompositeMasked",
+  "steps": 25,
+  "cfg": 1,
+  "sampler": "euler/simple"
+ }
+}
