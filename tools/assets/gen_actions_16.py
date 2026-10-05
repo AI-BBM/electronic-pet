@@ -32,35 +32,24 @@ NEGATIVE = ("background scene, gradient background, colored background, floor sh
 
 DEFAULT_SEEDS = [68, 101]
 
-# 16 动作清单草案 v1（id → 中文名 + 显式动作短语；短语逐动作独立、其余上下文一致）
+# 16 动作清单（Issue #44 定稿 v1，按黄总叙事「亮相→歪头→蓄力→挥手三连→蹦跳→大跳→收官」冻结）
 DEFAULT_ACTIONS = {
-    "idle":  ("待机", "standing naturally and relaxed, front paws resting, looking "
-                     "straight at the camera with a gentle smile"),
-    "wave":  ("挥手", "right front paw raised beside its head, open paw waving hello"),
-    "jump":  ("跳跃", "leaping joyfully in mid-air, all feet off the ground, ears and "
-                     "fur bouncing upward, delighted expression"),
-    "cheer": ("欢呼", "both front paws raised high above its head in celebration, "
-                     "eyes sparkling with star highlights, cheering"),
-    "walk":  ("行走", "mid-step walking forward, one front paw lifted, gentle head bob"),
-    "run":   ("奔跑", "running fast, body leaning forward, cheeks pressed by the wind, "
-                     "determined happy face"),
-    "sit":   ("端坐", "sitting down upright with back straight, front paws together, "
-                     "attentive expression"),
-    "sleep": ("睡觉", "curled up sleeping peacefully on the ground, eyes closed, tiny "
-                     "breathing motion, a small floating z outline above its head"),
-    "eat":   ("进食", "holding a small treat in its front paws, nibbling and chewing "
-                     "happily with puffed cheeks"),
-    "dance": ("跳舞", "dancing happily, hips swaying side to side, one front paw "
-                     "pointing up to the sky"),
-    "nod":   ("点头", "nodding its head down once politely in agreement, earnest eyes"),
-    "shake": ("摇头", "shaking its head side to side saying no, cheeks wobbling"),
-    "sad":   ("委屈", "drooping and dejected, head and ears hanging down, big glossy "
-                     "teary eyes looking up, quivering lower lip"),
-    "clap":  ("鼓掌", "clapping its front paws together happily in applause"),
-    "bow":   ("鞠躬", "bowing forward politely at the waist as a formal thank-you "
-                     "greeting"),
-    "spin":  ("转圈", "spinning around joyfully on one foot, arms spread out, dizzy "
-                     "happy smile"),
+    "01_opening":    ("开场亮相", "standing naturally and relaxed facing forward, establishing character identity"),
+    "02_tilt_left":  ("律动歪头·左", "tilting head playfully to the left with big curious eyes"),
+    "03_tilt_right": ("律动歪头·右", "tilting head cheerfully to the right with sparkling happy expression"),
+    "04_crouch":     ("蓄力下蹲", "crouching down low with lowered center of gravity, preparing to spring up"),
+    "05_paw_lift":   ("抬爪预备", "standing on hind feet, lifting front paw/wing halfway, preparing to wave"),
+    "06_wave_ready": ("挥手·举爪", "right front paw/wing raised upright beside its head, open paw ready to wave"),
+    "07_wave_left":  ("挥手·挥左", "right front paw/wing waving tilted towards the left"),
+    "08_wave_right": ("挥手·挥右", "right front paw/wing waving tilted towards the right"),
+    "09_bounce":     ("开心蹦跳", "springing upward happily with feet just leaving the ground"),
+    "10_jump_apex":  ("腾空大跳", "leaping high at apex of jump in mid-air, joyful triumphant celebration"),
+    "11_landing":    ("落地缓冲", "landing softly on the ground, bending knees to absorb the landing comfortably"),
+    "12_nod":        ("满意点头", "nodding head down once politely and happily with an earnest approving smile"),
+    "13_shuffle":    ("原地小碎步", "cute rapid shuffle steps in place, shifting weight playfully from foot to foot"),
+    "14_lookback":   ("转身回望", "turning body into three-quarter rear angle, glancing back cutely over shoulder"),
+    "15_settle":     ("收势站定", "turning back to front, clean composed standing posture"),
+    "16_wink_smile": ("眨眼微笑收官", "confident front facing pose, winking one eye cheerfully with a bright finishing smile"),
 }
 
 
