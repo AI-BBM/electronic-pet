@@ -1,0 +1,145 @@
+{
+ "species": "bunny",
+ "stage": 3,
+ "f0_seed": 68,
+ "frames": [
+  {
+   "frame": 0,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 10.0,
+    "202": 14.1
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  },
+  {
+   "frame": 1,
+   "seed": 68,
+   "cand_scores": {
+    "68": 9.8,
+    "101": 13.9,
+    "202": 11.3
+   },
+   "pre_align_centroid_shift": [
+    0.7,
+    9.2
+   ],
+   "scale": 0.9681,
+   "post_h": 512
+  },
+  {
+   "frame": 2,
+   "seed": 68,
+   "cand_scores": {
+    "68": 10.6,
+    "101": 11.6,
+    "202": 11.0
+   },
+   "pre_align_centroid_shift": [
+    4.1,
+    8.9
+   ],
+   "scale": 0.9619,
+   "post_h": 512
+  },
+  {
+   "frame": 3,
+   "seed": 68,
+   "cand_scores": {
+    "68": 8.8,
+    "101": 13.0,
+    "202": 12.3
+   },
+   "pre_align_centroid_shift": [
+    -3.0,
+    1.5
+   ],
+   "scale": 0.9806,
+   "post_h": 512,
+   "mirror_of": 2
+  },
+  {
+   "frame": 4,
+   "seed": 68,
+   "cand_scores": {
+    "68": 10.6,
+    "101": 11.6,
+    "202": 11.0
+   },
+   "pre_align_centroid_shift": [
+    4.1,
+    8.9
+   ],
+   "scale": 0.9619,
+   "post_h": 512
+  },
+  {
+   "frame": 5,
+   "seed": 68,
+   "cand_scores": {
+    "68": 8.8,
+    "101": 13.0,
+    "202": 12.3
+   },
+   "pre_align_centroid_shift": [
+    -3.0,
+    1.5
+   ],
+   "scale": 0.9806,
+   "post_h": 512,
+   "mirror_of": 4
+  },
+  {
+   "frame": 6,
+   "seed": 68,
+   "cand_scores": {
+    "68": 9.6,
+    "101": 14.9,
+    "202": 11.5
+   },
+   "pre_align_centroid_shift": [
+    1.9,
+    8.3
+   ],
+   "scale": 0.9701,
+   "post_h": 512
+  },
+  {
+   "frame": 7,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 10.0,
+    "202": 14.1
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  }
+ ],
+ "frame_diffs": [
+  9.4,
+  3.6,
+  13.0,
+  13.0,
+  13.0,
+  13.0,
+  9.2,
+  0.0
+ ],
+ "motion_diffs_min": 3.6,
+ "webp": {
+  "path": "out\\bunny_3\\bunny_3-anim.webp",
+  "bytes": 137228,
+  "quality": 85
+ }
+}

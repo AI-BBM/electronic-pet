@@ -1,0 +1,145 @@
+{
+ "species": "bunny",
+ "stage": 2,
+ "f0_seed": 68,
+ "frames": [
+  {
+   "frame": 0,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 16.4,
+    "202": 16.5
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  },
+  {
+   "frame": 1,
+   "seed": 68,
+   "cand_scores": {
+    "68": 19.9,
+    "101": 19.0,
+    "202": 18.0
+   },
+   "pre_align_centroid_shift": [
+    3.9,
+    -9.2
+   ],
+   "scale": 0.9,
+   "post_h": 512
+  },
+  {
+   "frame": 2,
+   "seed": 68,
+   "cand_scores": {
+    "68": 20.7,
+    "101": 20.3,
+    "202": 20.9
+   },
+   "pre_align_centroid_shift": [
+    2.7,
+    -12.2
+   ],
+   "scale": 0.9,
+   "post_h": 512
+  },
+  {
+   "frame": 3,
+   "seed": 68,
+   "cand_scores": {
+    "68": 15.1,
+    "101": 20.6,
+    "202": 17.4
+   },
+   "pre_align_centroid_shift": [
+    1.5,
+    -10.5
+   ],
+   "scale": 1.0045,
+   "post_h": 512,
+   "mirror_of": 2
+  },
+  {
+   "frame": 4,
+   "seed": 68,
+   "cand_scores": {
+    "68": 20.7,
+    "101": 20.3,
+    "202": 20.9
+   },
+   "pre_align_centroid_shift": [
+    2.7,
+    -12.2
+   ],
+   "scale": 0.9,
+   "post_h": 512
+  },
+  {
+   "frame": 5,
+   "seed": 68,
+   "cand_scores": {
+    "68": 15.1,
+    "101": 20.6,
+    "202": 17.4
+   },
+   "pre_align_centroid_shift": [
+    1.5,
+    -10.5
+   ],
+   "scale": 1.0045,
+   "post_h": 512,
+   "mirror_of": 4
+  },
+  {
+   "frame": 6,
+   "seed": 68,
+   "cand_scores": {
+    "68": 16.1,
+    "101": 17.9,
+    "202": 17.6
+   },
+   "pre_align_centroid_shift": [
+    0.5,
+    -2.0
+   ],
+   "scale": 0.929,
+   "post_h": 512
+  },
+  {
+   "frame": 7,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 16.4,
+    "202": 16.5
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  }
+ ],
+ "frame_diffs": [
+  19.1,
+  7.6,
+  21.2,
+  21.2,
+  21.2,
+  19.7,
+  15.2,
+  0.0
+ ],
+ "motion_diffs_min": 7.6,
+ "webp": {
+  "path": "out\\bunny_2\\bunny_2-anim.webp",
+  "bytes": 183538,
+  "quality": 85
+ }
+}

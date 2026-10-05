@@ -122,3 +122,24 @@ curl -sI "https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/cat/1.png" 
 #   curl -sI https://<bucket>.<endpoint>/__smoke__/a.png        # 期待 200 + image/png
 #   oss2 list_objects(prefix="__smoke__/") 逐个 delete_object 后复查 list 为空
 ```
+
+## 挥手帧动画（#37 M9 v5，2026-10-05 定稿）
+
+宠物 idle 动画按 v5 工艺生成：文生图模型逐帧受控生成（禁 EDIT 整图反复变形、
+禁程序整帧形变），8 帧 110ms 循环动态 WebP，前端 `animOf()` 优先取
+`pets/{species}/{stage}-anim.webp`（缺失回退静态 png → 剪影）。
+
+```
+OSS 静态图合成白底参考图
+  → gen_wave_frames.py   ComfyUI Qwen-Image 2.1 EDIT：参考图 latent 锁形象 +
+                         固定 seed 组 + 逐帧显式姿态短语，8 帧 × 多候选
+  → 人工挑帧             帧间形象/色调最一致的一组；个别帧单帧重摇
+  → assemble_wave.py     脚底锚定对齐 + 白底泛洪抠透明（+ 可选镜像增强挥幅）
+                         → 8 帧 WebP ≤300KB + assemble_report.json（seed/
+                           prompt/挑帧分/对齐数据/帧差）+ preview_sheet.png
+  → upload_oss.py        覆盖上传 OSS pets/{species}/{stage}-anim.webp
+```
+
+探针定案参数（详见 gen_wave_frames.py 头注）：EDIT latent + denoise=1.0 是唯一
+同时满足姿态变化/白底/帧间一致的路线；该 latent 低重绘（denoise<1）输出噪声糊，
+标准 VAEEncode img2img 结构变化（抬爪）出不来。
