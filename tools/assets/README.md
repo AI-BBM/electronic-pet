@@ -164,3 +164,34 @@ inpaint**，身体一致性是像素级物理保证而非"看着差不多"。
 交付证据：wave-evidence/v6/{pet}/ = mask.png（运动包络遮罩）+ 逐帧遮罩外
 差值自测报告；wave-evidence/v6/meta_v6.json = 逐帧 prompt/seed/采样参数。
 实测：全帧遮罩外差 0~0.27/255（限值 2），身体/脸/服饰逐像素不变。
+
+## 角色卡 → 16 动作 → 超分 三步管线（2026-10-05 新增）
+
+宠物动作素材的标准生产顺序（黄总定口径）：**先生成角色卡，再由角色卡派生
+角色 16 个动作，最后超分放大**。角色卡是全部动作的唯一形象锚。
+
+```
+线上定稿静态图 pets/{species}/{stage}.png（512 长边）
+  → gen_character_card.py  垫白 + RealESRGAN x2 预放大作参考 +
+                           EDIT（denoise=1.0，固定 seed 列）生成定稿卡
+                           front=正视图卡（动作锚定用）/ sheet=三视图设定卡
+  → 人工选定卡 seed        后续动作全部以该卡为参考图
+  → gen_actions_16.py      卡参考 latent + 显式动作短语 × 16 动作 × seed 列
+                           （DEFAULT_ACTIONS 内置清单草案，--actions 可选子集）
+  → 人工挑动作帧           形象/姿态不合格单动作重摇（--actions 续跑）
+  → upscale_sr.py          RealESRGAN_x2plus 定稿卡/动作帧超分（x2/x4）
+  → assemble 系 / OSS      抠图对齐、循环装配、覆盖上传（同 wave 工艺）
+```
+
+要点：
+
+- 探针定案沿用 M9：EDIT latent + denoise=1.0 是姿态变化/白底/形象一致
+  唯一同时满足的路线；同 seed 列保脸，跨 seed 混挑必换形象；
+- 角色卡产出 `design/character_cards/{species}_{stage}/`，动作原始帧产出
+  `design/actions_raw/{species}_{stage}/`，均带 meta.json（逐张 prompt/seed/
+  参考卡），证据随代码入库；
+- 16 动作清单目前是**草案 v1**（gen_actions_16.py 顶部 DEFAULT_ACTIONS，
+  带产品映射：wave 上线问候 / cheer+jump 被加分 / sad 被扣分 / sleep 离线 /
+  eat 喂食 / spin 升级进化 / bow 颁奖致谢），待 PM/黄总定稿后冻结；
+- 外观锚定模板沿用 gen_wave_frames.APPEARANCE（bunny/chick 全 6 阶段手调
+  定稿），新物种需补该表并连同 --card 实卡验收。
