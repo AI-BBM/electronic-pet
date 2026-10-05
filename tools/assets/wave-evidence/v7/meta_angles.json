@@ -1,0 +1,138 @@
+{
+ "bunny_1_right_s68": {
+  "pet": "bunny_1",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same cream-colored plush robot bunny from the reference image: oversized round head, chibi toy proportions, short dense velvety plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, HUGE round glossy black eyes with big white sparkle highlights, tiny pink triangle nose, pink blush cheeks, wearing a beige collar with a golden round tag, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "bunny_1_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_1_back_s68": {
+  "pet": "bunny_1",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same cream-colored plush robot bunny from the reference image: oversized round head, chibi toy proportions, short dense velvety plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, HUGE round glossy black eyes with big white sparkle highlights, tiny pink triangle nose, pink blush cheeks, wearing a beige collar with a golden round tag, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "bunny_1_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_2_left_s68": {
+  "pet": "bunny_2",
+  "angle": "left",
+  "seed": 68,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, seen from its left side, full body in profile facing left",
+  "ref": "bunny_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_2_right_s68": {
+  "pet": "bunny_2",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "bunny_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_2_back_s68": {
+  "pet": "bunny_2",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same armored cream plush robot bunny from the reference image: oversized round head, short dense cream plush fur, two tall upright ears with glowing pink heart-shaped LED lights inside, round dark eyes, beige tactical collar with a small pendant, cream-colored mechanical shoulder armor and robotic gauntlet arms, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "bunny_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_3_left_s68": {
+  "pet": "bunny_3",
+  "angle": "left",
+  "seed": 68,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, seen from its left side, full body in profile facing left",
+  "ref": "bunny_3_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_3_right_s68": {
+  "pet": "bunny_3",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "bunny_3_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "bunny_3_back_s68": {
+  "pet": "bunny_3",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same cream fluffy plush bunny from the reference image: very round fluffy body, two very tall upright plush ears with glowing pink heart-shaped LED lights inside, big round dark eyes, pink blush cheeks, tiny pink nose, white wired headphones resting around its neck, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "bunny_3_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_1_left_s68": {
+  "pet": "chick_1",
+  "angle": "left",
+  "seed": 68,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its left side, full body in profile facing left",
+  "ref": "chick_1_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_1_right_s68": {
+  "pet": "chick_1",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "chick_1_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_1_back_s68": {
+  "pet": "chick_1",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same round yellow robot chick from the reference image: a cracked white eggshell half worn as a helmet on its head, big round glossy black eyes, small orange beak, chubby yellow rubbery body with subtle panel lines, tiny yellow wings, orange feet, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "chick_1_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_2_left_s68": {
+  "pet": "chick_2",
+  "angle": "left",
+  "seed": 68,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its left side, full body in profile facing left",
+  "ref": "chick_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_2_right_s68": {
+  "pet": "chick_2",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "chick_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_2_back_s68": {
+  "pet": "chick_2",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same yellow robot chick from the reference image: cracked white eggshell helmet on its head, black visor face with two glowing round yellow eyes, small orange beak, yellow mechanical body with panel lines and tiny lights, small mechanical wings, orange robot feet, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "chick_2_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_3_left_s68": {
+  "pet": "chick_3",
+  "angle": "left",
+  "seed": 68,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its left side, full body in profile facing left",
+  "ref": "chick_3_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_3_right_s68": {
+  "pet": "chick_3",
+  "angle": "right",
+  "seed": 68,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, seen from its right side, full body in profile facing right",
+  "ref": "chick_3_white.png",
+  "mode": "EDIT d1.0"
+ },
+ "chick_3_back_s68": {
+  "pet": "chick_3",
+  "angle": "back",
+  "seed": 68,
+  "prompt": "The exact same stocky yellow armored robot chick from the reference image: white and yellow space helmet on its head, big round dark eyes, orange beak, yellow armor plates with small glowing round indicators, large round shoulder shields with a star emblem, orange armored feet, soft studio lighting, plain pure white background, full body, centered composition, seen from behind, full body back view",
+  "ref": "chick_3_white.png",
+  "mode": "EDIT d1.0"
+ }
+}
