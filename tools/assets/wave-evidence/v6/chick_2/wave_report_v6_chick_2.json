@@ -1,0 +1,29 @@
+{
+ "pet": "chick_2",
+ "ms": 200,
+ "sources": [
+  "orig",
+  "pose1_s68",
+  "pose2_s68",
+  "mirror-inside(pose1_s68)",
+  "pose1_s68",
+  "mirror-inside(pose2_s68)",
+  "pose2_s68",
+  "orig"
+ ],
+ "outside_diffs": [
+  0.0,
+  0.272,
+  0.274,
+  0.214,
+  0.272,
+  0.214,
+  0.274,
+  0.0
+ ],
+ "webp": {
+  "path": "C:/Users/hxx/AppData/Local/Temp/m9v6\\out\\chick_2-anim.webp",
+  "bytes": 81552,
+  "quality": 85
+ }
+}
