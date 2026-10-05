@@ -1,0 +1,145 @@
+{
+ "species": "chick",
+ "stage": 1,
+ "f0_seed": 68,
+ "frames": [
+  {
+   "frame": 0,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 23.0,
+    "202": 17.3
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  },
+  {
+   "frame": 1,
+   "seed": 68,
+   "cand_scores": {
+    "68": 18.0,
+    "101": 18.3,
+    "202": 20.1
+   },
+   "pre_align_centroid_shift": [
+    -7.0,
+    -27.7
+   ],
+   "scale": 0.9293,
+   "post_h": 512
+  },
+  {
+   "frame": 2,
+   "seed": 68,
+   "cand_scores": {
+    "68": 16.9,
+    "101": 17.3,
+    "202": 19.7
+   },
+   "pre_align_centroid_shift": [
+    4.1,
+    -26.6
+   ],
+   "scale": 0.9741,
+   "post_h": 512
+  },
+  {
+   "frame": 3,
+   "seed": 68,
+   "cand_scores": {
+    "68": 17.9,
+    "101": 17.0,
+    "202": 19.8
+   },
+   "pre_align_centroid_shift": [
+    -3.2,
+    -23.1
+   ],
+   "scale": 0.9616,
+   "post_h": 512,
+   "mirror_of": 2
+  },
+  {
+   "frame": 4,
+   "seed": 68,
+   "cand_scores": {
+    "68": 16.9,
+    "101": 17.3,
+    "202": 19.7
+   },
+   "pre_align_centroid_shift": [
+    4.1,
+    -26.6
+   ],
+   "scale": 0.9741,
+   "post_h": 512
+  },
+  {
+   "frame": 5,
+   "seed": 68,
+   "cand_scores": {
+    "68": 17.9,
+    "101": 17.0,
+    "202": 19.8
+   },
+   "pre_align_centroid_shift": [
+    -3.2,
+    -23.1
+   ],
+   "scale": 0.9616,
+   "post_h": 512,
+   "mirror_of": 4
+  },
+  {
+   "frame": 6,
+   "seed": 68,
+   "cand_scores": {
+    "68": 15.9,
+    "101": 15.3,
+    "202": 18.3
+   },
+   "pre_align_centroid_shift": [
+    -8.4,
+    -16.2
+   ],
+   "scale": 0.9512,
+   "post_h": 512
+  },
+  {
+   "frame": 7,
+   "seed": 68,
+   "cand_scores": {
+    "68": 0.0,
+    "101": 23.0,
+    "202": 17.3
+   },
+   "pre_align_centroid_shift": [
+    0.0,
+    0.0
+   ],
+   "scale": 1.0,
+   "post_h": 512
+  }
+ ],
+ "frame_diffs": [
+  17.2,
+  9.2,
+  16.6,
+  16.6,
+  16.6,
+  15.7,
+  15.2,
+  0.0
+ ],
+ "motion_diffs_min": 9.2,
+ "webp": {
+  "path": "out\\chick_1\\chick_1-anim.webp",
+  "bytes": 128688,
+  "quality": 85
+ }
+}
