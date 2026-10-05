@@ -126,7 +126,7 @@ curl -sI "https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/pets/cat/1.png" 
 ## 挥手帧动画（#37 M9 v5，2026-10-05 定稿）
 
 宠物 idle 动画按 v5 工艺生成：文生图模型逐帧受控生成（禁 EDIT 整图反复变形、
-禁程序整帧形变），8 帧 110ms 循环动态 WebP，前端 `animOf()` 优先取
+禁程序整帧形变），8 帧 200ms 循环动态 WebP，前端 `animOf()` 优先取
 `pets/{species}/{stage}-anim.webp`（缺失回退静态 png → 剪影）。
 
 ```
