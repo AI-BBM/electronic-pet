@@ -299,6 +299,11 @@
         });
       }
 
+      // #37 M9：anim.webp 优先，加载失败回退静态 png（再失败兜底剪影）
+      function animOf(url) {
+        return url ? url.replace('.png', '-anim.webp') : url;
+      }
+
       function show(view) {
         ['login-view', 'register-view', 'work-view', 'detail-view', 'trash-view'].forEach(function (id) {
           $(id).classList.toggle('active', id === view);
@@ -353,7 +358,7 @@
         if (!s.adopted) {
           return '<img class="pet-thumb" src="' + EGG_COMMON + '" alt="未领养">';
         }
-        return '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">';
+        return '<img class="pet-thumb" src="' + escapeHtml(animOf(s.imageUrl)) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="if(!this.dataset.f){this.dataset.f=1;this.src=\'' + escapeHtml(s.imageUrl) + '\';}else{this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\';}">';
       }
 
       function loadRoster() {
@@ -364,7 +369,7 @@
             studentIds[s.studentNo] = s.id;
             rosterCache[s.studentNo] = s;
             var img = s.adopted
-              ? '<img class="card-pet-img" src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">'
+              ? '<img class="card-pet-img" src="' + escapeHtml(animOf(s.imageUrl)) + '" alt="' + escapeHtml(s.speciesName) + '" onerror="if(!this.dataset.f){this.dataset.f=1;this.src=\'' + escapeHtml(s.imageUrl) + '\';}else{this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\';}">'
               : '<img class="card-pet-img" src="' + EGG_COMMON + '" alt="未领养">';
             var ops = s.adopted
               ? '<button class="do-points">加分</button><button class="do-rename">改名</button>'
@@ -497,8 +502,8 @@
         $('detail-student-name').textContent = s.name;
         $('detail-student-no').textContent = '学号 ' + s.studentNo;
         if (s.adopted) {
-          $('detail-pet-img').src = s.imageUrl;
-          $('detail-pet-img').onerror = function () { this.onerror = null; this.src = s.silhouette; };
+          $('detail-pet-img').src = animOf(s.imageUrl);
+          $('detail-pet-img').onerror = function () { this.onerror = function () { this.onerror = null; this.src = s.silhouette; }; this.src = s.imageUrl; };
           $('detail-pet-name').textContent = s.petName || s.speciesName;
           $('detail-species-name').textContent = s.speciesName;
           $('detail-level').textContent = 'Lv' + s.level;
@@ -548,7 +553,7 @@
         api('GET', '/api/teacher/trash', null, true).then(function (data) {
           $('trash').innerHTML = data.items.map(function (s) {
             var petImg = s.imageUrl
-              ? '<img class="pet-thumb" src="' + escapeHtml(s.imageUrl) + '" alt="宠物" onerror="this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\'">'
+              ? '<img class="pet-thumb" src="' + escapeHtml(animOf(s.imageUrl)) + '" alt="宠物" onerror="if(!this.dataset.f){this.dataset.f=1;this.src=\'' + escapeHtml(s.imageUrl) + '\';}else{this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\';}">'
               : '<span class="muted">无宠物</span>';
             return '<tr data-id="' + s.id + '">' +
               '<td data-label="学号">' + escapeHtml(s.studentNo) + '</td>' +
