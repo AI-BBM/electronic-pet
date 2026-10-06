@@ -49,6 +49,22 @@ DEFAULT_SEEDS = [68, 101]
 # gen_wave_frames.APPEARANCE 的 bunny_3 缺肩甲/项圈描述，不能作为身份规范）。
 # 新物种/新阶段出卡前必须先看静态图补本表。
 APPEARANCE_V2 = {
+    ("bunny", 1): (
+        "The exact same small cream ivory plush baby bunny from the reference "
+        "image: very round oversized head on a tiny chubby sitting body, front "
+        "paws resting together, short dense cream plush fur, two tall upright "
+        "ears with pink LED screen heart lights glowing inside, HUGE round glossy "
+        "dark eyes with big sparkle highlights, pink blush cheeks, beige studded "
+        "collar with a round golden tag, no armor, baby chibi proportions, soft "
+        "studio lighting, plain pure white background, full body, centered "
+        "composition"),
+    ("bunny", 2): (
+        "The exact same cream-beige plush bunny from the reference image: standing "
+        "upright on hind legs, chunky round body with short dense beige plush fur, "
+        "two tall upright ears with warm golden screen heart lights glowing inside, "
+        "big round dark eyes, tiny pink nose, beige studded collar with a round "
+        "golden tag, no armor, plump chibi toy proportions, soft studio lighting, "
+        "plain pure white background, full body, centered composition"),
     ("bunny", 3): (
         "The exact same cream-beige plush bunny from the reference image: chunky "
         "round body with short dense beige-cream plush fur, two tall upright plush "

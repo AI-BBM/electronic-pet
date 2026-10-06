@@ -22,9 +22,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gen_wave_frames import APPEARANCE
 import upscale_sr
-from gen_character_card import build_graph, queue_and_wait, fetch_png
+from gen_character_card import APPEARANCE_V2, build_graph, queue_and_wait, fetch_png
 
 HOST = upscale_sr.HOST
 NEGATIVE = ("background scene, gradient background, colored background, floor shadow, "
@@ -65,9 +64,10 @@ def main():
     args = ap.parse_args()
 
     key = (args.species, args.stage)
-    if key not in APPEARANCE:
-        print("错误：无该阶段外观模板（gen_wave_frames.APPEARANCE）", key,
-              file=sys.stderr)
+    appearance = APPEARANCE_V2.get(key)
+    if appearance is None:
+        print("错误：APPEARANCE_V2 无该阶段基准描述（gen_character_card），"
+              "先对照 OSS 静态图补表再出动作", key, file=sys.stderr)
         return 2
     unknown = [a for a in args.actions.split(",") if a not in DEFAULT_ACTIONS]
     if unknown:
@@ -92,7 +92,7 @@ def main():
     seeds = [int(s) for s in args.seeds.split(",")]
     for act in args.actions.split(","):
         zh, pose = DEFAULT_ACTIONS[act]
-        prompt = APPEARANCE[key] + ", " + pose
+        prompt = appearance + ", " + pose
         for seed in seeds:
             tag = f"{act}_s{seed}"
             if tag in meta:
