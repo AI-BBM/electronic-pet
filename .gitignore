@@ -2,3 +2,5 @@ output/
 _payloads/*.wrap.json
 *.part
 design/assets_output/
+__pycache__/
+*.pyc
