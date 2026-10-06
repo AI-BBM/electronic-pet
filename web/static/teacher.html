@@ -38,6 +38,9 @@
     .card-ops { margin-top: 8px; }
     .card-ops button { margin: 2px; font-size: 13px; }
     .detail-pet-img { width: 240px; height: 240px; object-fit: contain; display: block; margin: 0 auto; }
+    #detail-view { position: relative; }
+    #detail-scene { position: fixed; inset: 0; z-index: 0; background: #dfe9f3 center / cover no-repeat; pointer-events: none; }
+    #detail-view .card { position: relative; z-index: 1; background: rgba(255,255,255,0.92); }
     .detail-field { font-size: 15px; margin: 4px 0; }
     .adopt-picker { display: none; position: fixed; inset: 0; background: rgba(36,50,68,0.45); z-index: 10; align-items: center; justify-content: center; }
     .adopt-picker.open { display: flex; }
@@ -141,6 +144,7 @@
 
   <!-- 学生详情视图（#35 M8 U2） -->
   <div class="view" id="detail-view">
+    <div id="detail-scene" aria-hidden="true"></div>
     <div class="card">
       <button id="detail-back">← 返回</button>
       <img id="detail-pet-img" class="detail-pet-img" src="" alt="宠物">
@@ -278,6 +282,35 @@
       var studentIds = {}; // studentNo -> id（行内操作用）
       var rosterCache = {}; // studentNo -> roster 行（#35 M8 详情数据源）
       var EGG_COMMON = 'https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com/eggs/common.png';
+
+      // #49 M11 F1：场景背景按时段切换（本地时间 5 时段，默认兜底白天，失败纯色）
+      var OSS_BASE = 'https://pet-aibbm-assets.oss-cn-hangzhou.aliyuncs.com';
+      var SCENE_SLOTS = [
+        { id: 'morning',  from: 6,    to: 9 },
+        { id: 'daytime',  from: 9,    to: 17 },
+        { id: 'sunset',   from: 17,   to: 19.5 },
+        { id: 'night',    from: 19.5, to: 24 },
+        { id: 'midnight', from: 0,    to: 6 }
+      ];
+      function sceneUrl(now) {
+        var hh = now.getHours() + now.getMinutes() / 60;
+        var id = 'daytime';
+        for (var i = 0; i < SCENE_SLOTS.length; i++) {
+          var sl = SCENE_SLOTS[i];
+          if (hh >= sl.from && hh < sl.to) { id = sl.id; break; }
+        }
+        return OSS_BASE + '/scenes/' + id + '.jpg'; // 默认兜底白天：daytime.jpg
+      }
+      function applyScene() {
+        var url = sceneUrl(new Date());
+        var el = $('detail-scene');
+        if (!el || el.dataset.cur === url) return;
+        el.dataset.cur = url;
+        var probe = new Image();
+        probe.onload = function () { el.style.backgroundImage = "url('" + url + "')"; };
+        probe.onerror = function () { el.style.backgroundImage = 'none'; el.style.background = '#dfe9f3'; };
+        probe.src = url;
+      }
       var adoptTargetNo = ''; // 发宠目标学生（选择器确认后提交）
       var detailNo = '';      // 当前详情学生
 
@@ -308,6 +341,7 @@
         $('nav-work').classList.toggle('active', view === 'work-view' || view === 'detail-view');
         $('nav-trash').classList.toggle('active', view === 'trash-view');
       }
+      setInterval(applyScene, 60000);
 
       // ---------- 注册 ----------
       $('btn-send-code').onclick = function () {
@@ -499,6 +533,7 @@
         $('detail-student-no').textContent = '学号 ' + s.studentNo;
         if (s.adopted) {
           $('detail-pet-img').src = s.imageUrl;
+          applyScene();
           $('detail-pet-img').onerror = function () { this.onerror = function () { this.onerror = null; this.src = s.silhouette; }; this.src = s.imageUrl; };
           $('detail-pet-name').textContent = s.petName || s.speciesName;
           $('detail-species-name').textContent = s.speciesName;
