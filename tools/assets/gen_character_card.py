@@ -49,6 +49,23 @@ DEFAULT_SEEDS = [68, 101]
 # gen_wave_frames.APPEARANCE 的 bunny_3 缺肩甲/项圈描述，不能作为身份规范）。
 # 新物种/新阶段出卡前必须先看静态图补本表。
 APPEARANCE_V2 = {
+    ("bunny", 1): (
+        "The exact same small cream ivory plush baby bunny from the reference "
+        "image: very round oversized head on a tiny chubby sitting body, front "
+        "paws resting together, short dense cream plush fur, two tall upright "
+        "ears with pink LED screen heart lights glowing inside, HUGE round "
+        "glossy dark eyes with big sparkle highlights, pink blush cheeks, beige "
+        "studded collar with a round golden tag, no armor, baby chibi "
+        "proportions, soft studio lighting, plain pure white background, full "
+        "body, centered composition"),
+    ("bunny", 2): (
+        "The exact same cream-beige plush bunny from the reference image: "
+        "standing upright on hind legs, chunky round body with short dense "
+        "beige plush fur, two tall upright ears with warm golden screen heart "
+        "lights glowing inside, big round dark eyes, tiny pink nose, beige "
+        "studded collar with a round golden tag, no armor, plump chibi toy "
+        "proportions, soft studio lighting, plain pure white background, full "
+        "body, centered composition"),
     ("bunny", 3): (
         "The exact same cream-beige plush bunny from the reference image: chunky "
         "round body with short dense beige-cream plush fur, two tall upright plush "
@@ -57,6 +74,32 @@ APPEARANCE_V2 = {
         "shoulders and forearms, metallic collar with a golden heart-shaped tag, "
         "white headphones resting behind its arms around the neck, stocky chibi "
         "toy proportions, soft studio lighting, plain pure white background, full "
+        "body, centered composition"),
+    ("chick", 1): (
+        "The exact same round yellow robot chick from the reference image: "
+        "plump pear-shaped body with smooth glossy yellow rubbery skin, cracked "
+        "white eggshell half worn as a helmet with a small golden stud, HUGE "
+        "round glossy dark eyes with big white sparkle highlights, small orange "
+        "beak, tiny yellow rubbery wings, orange three-toed feet, thin body seam "
+        "lines with small glowing rivet dots, soft studio lighting, plain pure "
+        "white background, full body, centered composition"),
+    ("chick", 2): (
+        "The exact same yellow robot chick from the reference image: standing "
+        "upright, cracked white eggshell half worn as a helmet, black robot "
+        "visor face plate with two glowing round amber eyes behind it, small "
+        "orange beak, chunky yellow mechanical body with armor panel lines and "
+        "rivets, small yellow mechanical wings, orange armored robot feet, soft "
+        "studio lighting, plain pure white background, full body, centered "
+        "composition"),
+    ("chick", 3): (
+        "The exact same stocky yellow armored robot chick from the reference "
+        "image: glossy cream-ivory space helmet covering the top and back of "
+        "its head with visible seams and rivets, fluffy yellow chick face with "
+        "big round dark eyes, small orange beak and pink blush cheeks, creamy "
+        "pale-yellow mechanical armor suit with chest plates and glowing round "
+        "indicators, large round shoulder shield with a golden star emblem, "
+        "segmented mechanical arms, orange feet in armored boots, plump round "
+        "proportions, soft studio lighting, plain pure white background, full "
         "body, centered composition"),
 }
 
