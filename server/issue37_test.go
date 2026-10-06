@@ -1,38 +1,39 @@
 package server_test
 
-// Issue #37 M9 帧动画试点测试（前端 anim 优先回退 + 管线工具存在性）。
-// 素材生产管线（tools/assets/make_idle_anim.py）为 Python 工具，本文件守护其
-// 前端接入契约：anim.webp 优先、png 二级回退、silhouette 三级兜底。
+// Issue #37 M9 → #46 善后：黄总 2026-10-06 拍板终止动画线（"动的视频生成
+// 效果不好"）。本文件改守**静态直出契约**：宠物图直接用静态 png、失败兜底
+// 剪影；teacher.html 不得再引用 -anim.webp（OSS 动画对象已下线 404）。
 
 import (
+	"strings"
 	"testing"
 )
 
-func TestM9_FrontendAnimFallbackAnchors(t *testing.T) {
+func TestM9_FrontendStaticDirectAnchors(t *testing.T) {
 	h := newHandler(t)
 	body := m5Get(t, h, "/teacher.html")
 
-	for _, anchor := range []string{
-		`function animOf(url)`,            // URL 变换助手
-		`-anim.webp`,                      // 动画 URL 约定
-		`.png', '-anim.webp')`,            // 精确替换逻辑
-		`this.dataset.f=1`,                // 首跳回退标记（anim→png）
-		`escapeHtml(animOf(s.imageUrl))`,  // 卡片/表格走 anim
-		`animOf(s.imageUrl)`,              // 详情大图走 anim
-		`this.onerror = function () { this.onerror = null; this.src = s.silhouette; }; this.src = s.imageUrl;`, // 详情三级兜底（anim→png→silhouette）
+	// 反向锚点：动画死引用必须清干净
+	for _, banned := range []string{
+		`animOf`,
+		`-anim.webp`,
 	} {
-		if !m5Contains(body, anchor) {
-			t.Errorf("teacher.html 缺少 M9 anim 锚点 %q", anchor)
+		if strings.Contains(body, banned) {
+			t.Errorf("teacher.html 仍含动画死引用 %q（#46 H1：应直出静态 png）", banned)
 		}
 	}
-}
 
-func TestM9_AnimToolPlaceholder(t *testing.T) {
-	// 管线工具 make_idle_anim.py 为 Python 交付物（真实验证在 PR 流程 shell 步骤）；
-	// Go 侧守护 server 页面基线不回归即可。
-	h := newHandler(t)
-	body := m5Get(t, h, "/teacher.html")
-	if !m5Contains(body, `id="card-wall"`) {
-		t.Fatalf("teacher.html 缺少卡片墙（M8 基线破坏）")
+	// 正向锚点：静态直出 + 剪影兜底
+	for _, anchor := range []string{
+		`escapeHtml(s.imageUrl)`,       // 卡片/表格直出静态
+		`$('detail-pet-img').src = s.imageUrl;`, // 详情大图直出静态
+		`this.dataset.f=1`,             // png 失败首跳剪影标记
+		`this.onerror=null;this.src=\'`, // 兜底链闭合（HTML 内转义单引号）
+		`escapeHtml(s.silhouette)`,     // 剪影兜底
+		`id="card-wall"`,               // M8 卡片墙基线
+	} {
+		if !m5Contains(body, anchor) {
+			t.Errorf("teacher.html 缺少静态直出锚点 %q", anchor)
+		}
 	}
 }
