@@ -695,7 +695,7 @@ func (s *srv) handleTeacherPoints(w http.ResponseWriter, r *http.Request) {
 	if req.RequestID != "" {
 		var exists int
 		err := tx.QueryRow(
-			`SELECT 1 FROM point_logs WHERE pet_id = ? AND request_id = ? LIMIT 1`,
+			`SELECT 1 FROM point_logs WHERE pet_id = ? AND request_id = ? AND type = 'earn' LIMIT 1`,
 			petID, req.RequestID,
 		).Scan(&exists)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -807,7 +807,9 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			e.Points = int(points.Int64)
 			e.LastPointsAt = lastPoints.String
 			e.Currency = int(currency.Int64)
-			e.ActiveScene = activeScene.String
+			if activeScene.String != "" {
+				e.ActiveScene = activeScene.String
+			}
 			e.PetName = petName.String
 			if sp, ok := speciesByID[speciesID.String]; ok {
 				e.SpeciesID = sp.ID

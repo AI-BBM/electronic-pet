@@ -89,9 +89,15 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	if err := migrateM4Columns(db); err != nil {
 		return err
 	}
+	// M12（#51）：dedupe 索引升级为 (pet_id, type, request_id)——earn/spend
+	// 两类流水的 request_id 命名空间相互独立（同 ID 加分与购买互不干扰）。
+	// 旧索引不含 type，必须 DROP 重建（CREATE IF NOT EXISTS 不会改列）。
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_point_logs_dedupe`); err != nil {
+		return err
+	}
 	const idx = `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
-	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
+	ON point_logs (pet_id, type, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_students_class_no_live
 	ON students (class_id, student_no) WHERE deleted_at IS NULL;

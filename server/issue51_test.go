@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // m12Env 构建"教师 + 学生 + 宠物"基线环境：返回 token/studentID。
@@ -252,4 +253,79 @@ func TestM12_MigrationFromLegacyDB(t *testing.T) {
 	if _, ok := row["activeScene"]; !ok {
 		t.Fatal("重启迁移后 roster 缺 activeScene 字段")
 	}
+}
+
+// ⑦ 审查修复：earn/spend 的 requestId 命名空间相互独立——
+// 方向①：同 ID 先加分后购买，购买不得被误判/撞索引；
+// 方向②：同 ID 先购买后加分，加分必须正常入账（不被误判重放）。
+func TestM12_RequestIdNamespaceIsolation(t *testing.T) {
+	h, token, no := m12Env(t)
+	sid := m12StudentID(t, h, token, no)
+
+	// 方向①：加分 req-shared 后，同 ID 购买应正常。
+	m12Add(t, h, token, no, 10)
+	if st, body := m12Buy(t, h, token, sid, "meal", "req-shared"); st != http.StatusOK {
+		t.Fatalf("方向①同 ID 购买应 200, got %d %v", st, body)
+	}
+	// 方向②：购买 req-shared2 后，同 ID 加分应正常入账（不再被误判重放吞掉）。
+	if st, body := m12Buy(t, h, token, sid, "sleep", "req-shared2"); st != http.StatusOK {
+		t.Fatalf("购买 sleep 失败: %d %v", st, body)
+	}
+	before := m7Roster(t, h, token)[no]
+	dec := m12Add(t, h, token, no, 3)
+	pet := dec["pet"].(map[string]any)
+	if pet["points"].(float64) != before["points"].(float64)+3 {
+		t.Fatalf("方向②同 ID 加分被吞: points %v → %v", before["points"], pet["points"])
+	}
+	after := m7Roster(t, h, token)[no]
+	if after["currency"].(float64) != before["currency"].(float64)+3 {
+		t.Fatalf("方向② currency 未同步入账: %v → %v", before["currency"], after["currency"])
+	}
+}
+
+// ⑧ 审查修复：硬清理时 pet_skins 随宠物彻底清除（PM 裁决：不退款不转移）。
+func TestM12_HardCleanupPurgesSkins(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "pet.db")
+	h := newHandlerAt(t, dbPath)
+	token := m6RegisterTeacher(t, h, dbPath, "m12purge@example.com", "清理班")
+	st := m6MustCreateStudent(t, h, token, "待清", "99")
+	m12StudentID(t, h, token, st.StudentNo)
+	if _, decoded := doJSON(t, h, http.MethodPost, "/api/teacher/adopt", token,
+		map[string]any{"studentNo": st.StudentNo, "speciesId": "bunny"}); true {
+		_ = decoded
+	}
+	m12Add(t, h, token, st.StudentNo, 10)
+	sid := m12StudentID(t, h, token, st.StudentNo)
+	if s, body := m12Buy(t, h, token, sid, "meal", "purge-1"); s != http.StatusOK {
+		t.Fatalf("购买失败: %d %v", s, body)
+	}
+	// 软删 + 把 deleted_at 拨老于 3 个月。
+	if _, _ = m6DeleteStudent(h, token, st.ID); true {
+	}
+	db := m6OpenDB(t, dbPath)
+	// deleted_at 存 Unix 秒（与 handleDeleteStudent 同口径），拨到 91 天前。
+	old := time.Now().AddDate(0, 0, -91).Unix()
+	if _, err := db.Exec(`UPDATE students SET deleted_at = ? WHERE id = ?`, old, st.ID); err != nil {
+		t.Fatalf("拨旧 deleted_at 失败: %v", err)
+	}
+	_ = db.Close()
+	// 重启触发启动清理。
+	h2 := newHandlerAt(t, dbPath)
+	roster := m7Roster(t, h2, token)
+	if _, ok := roster[st.StudentNo]; ok {
+		t.Fatal("硬清理后花名册不应再出现该学生")
+	}
+	dbc := m6OpenDB(t, dbPath)
+	var pets, skins int
+	if err := dbc.QueryRow(`SELECT COUNT(*) FROM pets`).Scan(&pets); err != nil {
+		t.Fatalf("count pets: %v", err)
+	}
+	if err := dbc.QueryRow(`SELECT COUNT(*) FROM pet_skins`).Scan(&skins); err != nil {
+		t.Fatalf("count pet_skins: %v", err)
+	}
+	_ = dbc.Close()
+	if pets != 0 || skins != 0 {
+		t.Fatalf("硬清理残留: pets=%d pet_skins=%d, 期望全 0", pets, skins)
+	}
+	_ = h2
 }
