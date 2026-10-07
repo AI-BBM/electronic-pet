@@ -91,6 +91,11 @@ func (s *srv) routes() http.Handler {
 	mux.Handle("POST /api/teacher/students/{id}/restore", taught(http.HandlerFunc(s.handleRestoreStudent)))
 	mux.Handle("POST /api/teacher/pets/{studentID}/name", taught(http.HandlerFunc(s.handleTeacherRenamePet)))
 
+	// M12（#51）：皮肤商店——目录 / 购买 / 切换（教师代操作口径）
+	mux.Handle("GET /api/teacher/pets/{studentID}/skins", taught(http.HandlerFunc(s.handleTeacherSkinCatalog)))
+	mux.Handle("POST /api/teacher/pets/{studentID}/skins/buy", taught(http.HandlerFunc(s.handleTeacherSkinBuy)))
+	mux.Handle("POST /api/teacher/pets/{studentID}/skins/activate", taught(http.HandlerFunc(s.handleTeacherSkinActivate)))
+
 	// M4 契约沿用：代发宠物 / 代加分 / 花名册
 	mux.Handle("POST /api/teacher/adopt", taught(http.HandlerFunc(s.handleTeacherAdopt)))
 	mux.Handle("POST /api/teacher/points", taught(http.HandlerFunc(s.handleTeacherPoints)))
@@ -105,6 +110,15 @@ func (s *srv) routes() http.Handler {
 		mux.HandleFunc(m+" /api/teacher/points", s.methodNotAllowed(http.MethodPost))
 		mux.HandleFunc(m+" /api/teacher/pets/{studentID}/name", s.methodNotAllowed(http.MethodPost))
 		mux.HandleFunc(m+" /api/teacher/students/{id}/restore", s.methodNotAllowed(http.MethodPost))
+	}
+	// M12 皮肤商店方法级 405（各自允许方法之外的补集；不能并入上方四方法
+	// 循环——skins 允许 GET、buy/activate 允许 POST，会与真实注册冲突）。
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/teacher/pets/{studentID}/skins", s.methodNotAllowed(http.MethodGet))
+	}
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/teacher/pets/{studentID}/skins/buy", s.methodNotAllowed(http.MethodPost))
+		mux.HandleFunc(m+" /api/teacher/pets/{studentID}/skins/activate", s.methodNotAllowed(http.MethodPost))
 	}
 	mux.HandleFunc("GET /api/teacher/students", s.methodNotAllowed(http.MethodPost))
 	mux.HandleFunc("PUT /api/teacher/students", s.methodNotAllowed(http.MethodPost))

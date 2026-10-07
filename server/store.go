@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS pets (
 	egg_id          TEXT,
 	created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS pet_skins (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	pet_id      INTEGER NOT NULL REFERENCES pets(id),
+	scene_id    TEXT NOT NULL,
+	acquired_at TEXT NOT NULL DEFAULT (datetime('now')),
+	UNIQUE (pet_id, scene_id)
+);
 CREATE TABLE IF NOT EXISTS point_logs (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	pet_id     INTEGER NOT NULL REFERENCES pets(id),
@@ -82,9 +89,15 @@ CREATE TABLE IF NOT EXISTS point_logs (
 	if err := migrateM4Columns(db); err != nil {
 		return err
 	}
+	// M12（#51）：dedupe 索引升级为 (pet_id, type, request_id)——earn/spend
+	// 两类流水的 request_id 命名空间相互独立（同 ID 加分与购买互不干扰）。
+	// 旧索引不含 type，必须 DROP 重建（CREATE IF NOT EXISTS 不会改列）。
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_point_logs_dedupe`); err != nil {
+		return err
+	}
 	const idx = `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_point_logs_dedupe
-	ON point_logs (pet_id, request_id) WHERE request_id IS NOT NULL;
+	ON point_logs (pet_id, type, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_point_logs_pet ON point_logs (pet_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_students_class_no_live
 	ON students (class_id, student_no) WHERE deleted_at IS NULL;
@@ -125,6 +138,24 @@ func migrateM4Columns(db *sql.DB) error {
 	if !hasOperator {
 		if _, err := db.Exec(`ALTER TABLE point_logs ADD COLUMN operator TEXT NOT NULL DEFAULT 'teacher'`); err != nil {
 			return fmt.Errorf("migrate: add point_logs.operator: %w", err)
+		}
+	}
+	// M12（#51）：积分经济。pets.currency 存量从 0 起算（公告口径"积分自
+	// 上线起累计"，不迁移）；active_scene 当前展示皮肤（NULL=默认无皮肤）；
+	// point_logs.type 区分 earn（加分）/spend（购皮肤），存量流水一律 earn。
+	for _, m := range []struct{ table, column, ddl string }{
+		{"pets", "currency", `ALTER TABLE pets ADD COLUMN currency INTEGER NOT NULL DEFAULT 0`},
+		{"pets", "active_scene", `ALTER TABLE pets ADD COLUMN active_scene TEXT`},
+		{"point_logs", "type", `ALTER TABLE point_logs ADD COLUMN type TEXT NOT NULL DEFAULT 'earn'`},
+	} {
+		has, err := columnExists(db, m.table, m.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := db.Exec(m.ddl); err != nil {
+				return fmt.Errorf("migrate: add %s.%s: %w", m.table, m.column, err)
+			}
 		}
 	}
 	return nil

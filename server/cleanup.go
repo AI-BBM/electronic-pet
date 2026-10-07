@@ -72,6 +72,13 @@ func (s *srv) cleanupExpiredStudents(now time.Time) {
 			log.Printf("[trash-cleanup] delete logs (student %d): %v", id, err)
 			return
 		}
+		// M12（#51，PM 裁决）：pet_skins 随宠物硬清理彻底清除（不退款不转移）。
+		if _, err := tx.Exec(
+			`DELETE FROM pet_skins WHERE pet_id IN (SELECT id FROM pets WHERE student_id = ?)`, id,
+		); err != nil {
+			log.Printf("[trash-cleanup] delete pet_skins (student %d): %v", id, err)
+			return
+		}
 		if _, err := tx.Exec(`DELETE FROM pets WHERE student_id = ?`, id); err != nil {
 			log.Printf("[trash-cleanup] delete pets (student %d): %v", id, err)
 			return

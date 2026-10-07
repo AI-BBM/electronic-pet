@@ -460,10 +460,10 @@ func (s *srv) handleTeacherTrash(w http.ResponseWriter, r *http.Request) {
 	items := []trashEntry{}
 	for rows.Next() {
 		var (
-			e           trashEntry
-			deletedAt   int64
-			speciesID   sql.NullString
-			level       sql.NullInt64
+			e         trashEntry
+			deletedAt int64
+			speciesID sql.NullString
+			level     sql.NullInt64
 		)
 		if err := rows.Scan(&e.ID, &e.Name, &e.StudentNo, &deletedAt, &speciesID, &level); err != nil {
 			writeInternal(w, err, "scan trash")
@@ -695,7 +695,7 @@ func (s *srv) handleTeacherPoints(w http.ResponseWriter, r *http.Request) {
 	if req.RequestID != "" {
 		var exists int
 		err := tx.QueryRow(
-			`SELECT 1 FROM point_logs WHERE pet_id = ? AND request_id = ? LIMIT 1`,
+			`SELECT 1 FROM point_logs WHERE pet_id = ? AND request_id = ? AND type = 'earn' LIMIT 1`,
 			petID, req.RequestID,
 		).Scan(&exists)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -715,12 +715,16 @@ func (s *srv) handleTeacherPoints(w http.ResponseWriter, r *http.Request) {
 
 	newPoints := int(points) + req.Value
 	newLevel := LevelFor(newPoints, s.levels)
-	if _, err := tx.Exec(`UPDATE pets SET points = ?, level = ? WHERE id = ?`, newPoints, newLevel, petID); err != nil {
+	// M12 双轨制：加分按分值 1:1 同步入账积分（currency），等级逻辑不动。
+	if _, err := tx.Exec(
+		`UPDATE pets SET points = ?, level = ?, currency = currency + ? WHERE id = ?`,
+		newPoints, newLevel, req.Value, petID,
+	); err != nil {
 		writeInternal(w, err, "update pet")
 		return
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO point_logs (pet_id, delta, reason, request_id, operator) VALUES (?, ?, ?, ?, 'teacher')`,
+		`INSERT INTO point_logs (pet_id, delta, reason, request_id, operator, type) VALUES (?, ?, ?, ?, 'teacher', 'earn')`,
 		petID, req.Value, reason, nilIfEmpty(req.RequestID),
 	); err != nil {
 		writeInternal(w, err, "insert point log")
@@ -751,6 +755,9 @@ type rosterEntry struct {
 	Level        int    `json:"level"`
 	Points       int    `json:"points"`
 	LastPointsAt string `json:"lastPointsAt"`
+	// M12：积分余额与当前展示皮肤（空 = 默认无皮肤态）。
+	Currency    int    `json:"currency"`
+	ActiveScene string `json:"activeScene"`
 	// #32 W1：已领养为当前阶段图/剪影直链；未领养为空串。
 	ImageURL   string `json:"imageUrl"`
 	Silhouette string `json:"silhouette"`
@@ -764,7 +771,8 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 	defer s.dbMu.Unlock()
 	rows, err := s.db.Query(
 		`SELECT s.id, s.student_no, s.name, p.id, p.species_id, p.name, p.level, p.points,
-		        (SELECT MAX(created_at) FROM point_logs pl WHERE pl.pet_id = p.id)
+		        (SELECT MAX(created_at) FROM point_logs pl WHERE pl.pet_id = p.id),
+		        p.currency, p.active_scene
 		 FROM students s LEFT JOIN pets p ON p.student_id = s.id
 		 WHERE s.class_id = ? AND s.deleted_at IS NULL
 		 ORDER BY s.student_no ASC`,
@@ -785,8 +793,11 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			petName       sql.NullString
 			level, points sql.NullInt64
 			lastPoints    sql.NullString
+			currency      sql.NullInt64
+			activeScene   sql.NullString
 		)
-		if err := rows.Scan(&e.ID, &e.StudentNo, &e.Name, &petID, &speciesID, &petName, &level, &points, &lastPoints); err != nil {
+		if err := rows.Scan(&e.ID, &e.StudentNo, &e.Name, &petID, &speciesID, &petName, &level, &points, &lastPoints,
+			&currency, &activeScene); err != nil {
 			writeInternal(w, err, "scan roster")
 			return
 		}
@@ -795,6 +806,10 @@ func (s *srv) handleTeacherRoster(w http.ResponseWriter, r *http.Request) {
 			e.Level = int(level.Int64)
 			e.Points = int(points.Int64)
 			e.LastPointsAt = lastPoints.String
+			e.Currency = int(currency.Int64)
+			if activeScene.String != "" {
+				e.ActiveScene = activeScene.String
+			}
 			e.PetName = petName.String
 			if sp, ok := speciesByID[speciesID.String]; ok {
 				e.SpeciesID = sp.ID
