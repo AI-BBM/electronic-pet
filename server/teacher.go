@@ -181,7 +181,7 @@ func (s *srv) handleTeacherRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token": signTeacherToken(s.tokenSecret, classID),
+		"token": signTeacherToken(s.tokenSecret, classID, 0), // 新教师初始密码版本 0
 	})
 }
 
@@ -230,10 +230,11 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 	var (
 		classID  int64
 		passHash string
+		passVer  int64
 	)
 	err := s.db.QueryRow(
-		`SELECT class_id, pass_hash FROM teachers WHERE email = ?`, email,
-	).Scan(&classID, &passHash)
+		`SELECT class_id, pass_hash, pass_ver FROM teachers WHERE email = ?`, email,
+	).Scan(&classID, &passHash, &passVer)
 	s.dbMu.Unlock()
 	if errors.Is(err, sql.ErrNoRows) {
 		// 邮箱不存在也跑一次 dummy 比较：抹平与存在分支的耗时差，防计时枚举邮箱
@@ -251,8 +252,69 @@ func (s *srv) handleTeacherLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token": signTeacherToken(s.tokenSecret, classID),
+		"token": signTeacherToken(s.tokenSecret, classID, passVer),
 	})
+}
+
+// ---------- 自助改密（#53） ----------
+
+type changePasswordRequest struct {
+	OldPassword string `json:"oldPassword"`
+	NewPassword string `json:"newPassword"`
+}
+
+// handleTeacherChangePassword 教师自助改密：旧密码 bcrypt 验证（错 → 403）、
+// 新密码按字节 8..72（min 8 位口径、72 为 bcrypt 输入上限）；成功后
+// pass_ver 递增——所有携带旧版本的 token 在 requireTeacher 处 401（P3）。
+func (s *srv) handleTeacherChangePassword(w http.ResponseWriter, r *http.Request) {
+	classID := r.Context().Value(ctxKeyTeacher).(int64)
+
+	var req changePasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, errJSON("请求体过大"))
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, errJSON("%s", err.Error()))
+		return
+	}
+	if len(req.NewPassword) < minPasswordLen || len(req.NewPassword) > maxPasswordLen {
+		writeJSON(w, http.StatusBadRequest, errJSON("新密码需为 %d..%d 个字节", minPasswordLen, maxPasswordLen))
+		return
+	}
+
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+
+	var passHash string
+	err := s.db.QueryRow(
+		`SELECT pass_hash FROM teachers WHERE class_id = ?`, classID,
+	).Scan(&passHash)
+	if err != nil {
+		writeInternal(w, err, "load teacher")
+		return
+	}
+	if req.OldPassword == "" {
+		writeJSON(w, http.StatusBadRequest, errJSON("oldPassword 不能为空"))
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(passHash), []byte(req.OldPassword)) != nil {
+		writeJSON(w, http.StatusForbidden, errJSON("旧密码不正确"))
+		return
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		writeInternal(w, err, "hash new password")
+		return
+	}
+	if _, err := s.db.Exec(
+		`UPDATE teachers SET pass_hash = ?, pass_ver = pass_ver + 1 WHERE class_id = ?`,
+		string(newHash), classID,
+	); err != nil {
+		writeInternal(w, err, "update password")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // ---------- 名单管理 ----------

@@ -77,6 +77,7 @@
   <div class="nav-row" id="main-nav" style="display:none">
     <button id="nav-work" class="active">名单管理</button>
     <button id="nav-trash">垃圾桶</button>
+    <button id="nav-pass">修改密码</button>
     <button id="btn-logout" style="margin-left:auto">退出登录</button>
   </div>
 
@@ -158,6 +159,20 @@
       </div>
       <span id="detail-msg" class="err"></span>
     </div>
+  </div>
+
+  <!-- 修改密码视图（#53） -->
+  <div class="card view" id="pass-view">
+    <h2>修改密码</h2>
+    <p>旧密码：<input id="pass-old" type="password" autocomplete="current-password"></p>
+    <p>新密码：<input id="pass-new" type="password" placeholder="≥8 位" autocomplete="new-password"></p>
+    <p>确认新密码：<input id="pass-new2" type="password" autocomplete="new-password"></p>
+    <div class="row">
+      <button id="btn-change-pass">确认修改</button>
+      <button id="pass-back" class="linklike" style="background:none;border:none;color:#4c7dff;cursor:pointer">返回工作台</button>
+    </div>
+    <span id="pass-msg" class="err"></span>
+    <p class="hint">修改成功后当前登录会失效，需用新密码重新登录。</p>
   </div>
 
   <!-- 垃圾桶视图 -->
@@ -301,10 +316,10 @@
 
 
       function show(view) {
-        ['login-view', 'register-view', 'work-view', 'detail-view', 'trash-view'].forEach(function (id) {
+        ['login-view', 'register-view', 'work-view', 'detail-view', 'trash-view', 'pass-view'].forEach(function (id) {
           $(id).classList.toggle('active', id === view);
         });
-        $('main-nav').style.display = (view === 'work-view' || view === 'detail-view' || view === 'trash-view') ? '' : 'none';
+        $('main-nav').style.display = (view === 'work-view' || view === 'detail-view' || view === 'trash-view' || view === 'pass-view') ? '' : 'none';
         $('nav-work').classList.toggle('active', view === 'work-view' || view === 'detail-view');
         $('nav-trash').classList.toggle('active', view === 'trash-view');
       }
@@ -347,6 +362,28 @@
         localStorage.removeItem(TOKEN_KEY);
         detailNo = '';
         show('login-view');
+      };
+
+      // ---------- 修改密码（#53） ----------
+      $('nav-pass').onclick = function () {
+        $('pass-msg').textContent = '';
+        $('pass-old').value = $('pass-new').value = $('pass-new2').value = '';
+        show('pass-view');
+      };
+      $('pass-back').onclick = function () { show('work-view'); loadRoster(); };
+      $('btn-change-pass').onclick = function () {
+        $('pass-msg').textContent = '';
+        var oldP = $('pass-old').value, newP = $('pass-new').value, newP2 = $('pass-new2').value;
+        if (newP.length < 8) { $('pass-msg').textContent = '新密码至少 8 位'; return; }
+        if (newP !== newP2) { $('pass-msg').textContent = '两次输入的新密码不一致'; return; }
+        api('POST', '/api/teacher/change-password',
+          { oldPassword: oldP, newPassword: newP }, true)
+          .then(function () {
+            alert('密码已修改，请用新密码重新登录');
+            localStorage.removeItem(TOKEN_KEY); // 旧会话已随改密失效
+            show('login-view');
+          })
+          .catch(function (e) { $('pass-msg').textContent = e.message; });
       };
 
       // ---------- 花名册：卡片墙 + 表格双渲染 ----------
