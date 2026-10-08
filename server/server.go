@@ -82,6 +82,10 @@ func (s *srv) routes() http.Handler {
 	mux.HandleFunc("POST /api/teacher/email-code", s.handleTeacherEmailCode)
 	mux.HandleFunc("POST /api/teacher/register", s.handleTeacherRegister)
 	mux.HandleFunc("POST /api/teacher/login", s.handleTeacherLogin)
+	mux.Handle("POST /api/teacher/change-password", taught(http.HandlerFunc(s.handleTeacherChangePassword)))
+	mux.HandleFunc("GET /api/teacher/change-password", s.methodNotAllowed(http.MethodPost))
+	mux.HandleFunc("PUT /api/teacher/change-password", s.methodNotAllowed(http.MethodPost))
+	mux.HandleFunc("DELETE /api/teacher/change-password", s.methodNotAllowed(http.MethodPost))
 
 	// 名单管理（教师鉴权）
 	mux.Handle("POST /api/teacher/students", taught(http.HandlerFunc(s.handleCreateStudent)))
@@ -152,16 +156,35 @@ func (s *srv) handleAPIGone(w http.ResponseWriter, r *http.Request) {
 
 // requireTeacher 校验教师 Bearer token，把 classID 注入 context；
 // 学生 token（M6 起已无合法签发途径，存量自然失效）角色不符 403。
+// #53：token 携带签发时的教师密码版本，与 teachers.pass_ver 不一致（改密后）
+// 或教师不存在 → 401 登录过期；旧两段式 token 视为 ver=0，改密前兼容。
 func (s *srv) requireTeacher(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		classID, err := verifyTeacherToken(s.tokenSecret, token)
+		classID, ver, err := verifyTeacherToken(s.tokenSecret, token)
 		if errors.Is(err, errWrongRole) {
 			writeJSON(w, http.StatusForbidden, errJSON("权限不足"))
 			return
 		}
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, errJSON("未登录或 token 无效"))
+			return
+		}
+		// #53：token 携带签发时的教师密码版本，与 teachers.pass_ver 不一致（改密后）
+		// → 401 登录过期。存量班（M5 老库迁移）尚无教师账号行：仅放行 ver=0 的
+		// legacy token（M6 T15 语义，账号开通+首次改密后自然失效）。
+		var curVer int64
+		err = s.db.QueryRow(`SELECT pass_ver FROM teachers WHERE class_id = ?`, classID).Scan(&curVer)
+		if errors.Is(err, sql.ErrNoRows) {
+			if ver != 0 {
+				writeJSON(w, http.StatusUnauthorized, errJSON("登录已过期，请重新登录"))
+				return
+			}
+		} else if err != nil {
+			writeInternal(w, err, "check pass_ver")
+			return
+		} else if curVer != ver {
+			writeJSON(w, http.StatusUnauthorized, errJSON("登录已过期，请重新登录"))
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyTeacher, classID)))

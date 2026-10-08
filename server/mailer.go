@@ -300,9 +300,9 @@ type dbExecQuerier interface {
 // 连续失败达 verifyCodeMaxAttempts 直接作废该码（防 6 位码空间被暴力猜测）。
 func checkEmailCodeDB(db dbExecQuerier, email, code string) error {
 	const (
-		keyFmt              = "email_code:"
-		failKeyFmt          = "email_code_fail:"
-		maxAttempts   int64 = 5
+		keyFmt            = "email_code:"
+		failKeyFmt        = "email_code_fail:"
+		maxAttempts int64 = 5
 	)
 	var value string
 	err := db.QueryRow(`SELECT v FROM meta WHERE k = ?`, keyFmt+email).Scan(&value)

@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS teachers (
 	class_id   INTEGER NOT NULL UNIQUE REFERENCES classes(id),
 	email      TEXT NOT NULL UNIQUE,
 	pass_hash  TEXT NOT NULL,
+	pass_ver   INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS pets (
@@ -87,6 +88,9 @@ CREATE TABLE IF NOT EXISTS point_logs (
 		return err
 	}
 	if err := migrateM4Columns(db); err != nil {
+		return err
+	}
+	if err := migrateTeacherPassVer(db); err != nil {
 		return err
 	}
 	// M12（#51）：dedupe 索引升级为 (pet_id, type, request_id)——earn/spend
@@ -264,4 +268,21 @@ func columnExists(db *sql.DB, table, column string) (bool, error) {
 		}
 	}
 	return false, rows.Err()
+}
+
+// migrateTeacherPassVer 为 #53 教师自助改密补列（#11 教训：PRAGMA 查列、
+// 缺则 ALTER ADD，绝不放进 CREATE TABLE IF NOT EXISTS 同批 DDL）。
+// pass_ver 是教师密码版本：改密递增，签发 token 携带签发时版本，
+// requireTeacher 比对不一致即 401（旧会话全失效）。存量教师默认 0。
+func migrateTeacherPassVer(db *sql.DB) error {
+	has, err := columnExists(db, "teachers", "pass_ver")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := db.Exec(`ALTER TABLE teachers ADD COLUMN pass_ver INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("migrate: add teachers.pass_ver: %w", err)
+		}
+	}
+	return nil
 }

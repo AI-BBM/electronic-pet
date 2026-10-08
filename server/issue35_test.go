@@ -188,6 +188,7 @@ func TestM8_U2_DetailLogicNoNewAPI(t *testing.T) {
 	}
 	allowed := []string{
 		"/api/teacher/email-code", "/api/teacher/register", "/api/teacher/login",
+		"/api/teacher/change-password", // #53 教师自助改密（白名单内新增端点）
 		"/api/teacher/roster", "/api/teacher/adopt", "/api/teacher/points",
 		"/api/teacher/pets/", "/api/teacher/students", "/api/teacher/students/",
 		"/api/teacher/trash",

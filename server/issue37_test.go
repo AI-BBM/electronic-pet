@@ -25,12 +25,12 @@ func TestM9_FrontendStaticDirectAnchors(t *testing.T) {
 
 	// 正向锚点：静态直出 + 剪影兜底
 	for _, anchor := range []string{
-		`escapeHtml(s.imageUrl)`,       // 卡片/表格直出静态
+		`escapeHtml(s.imageUrl)`,                // 卡片/表格直出静态
 		`$('detail-pet-img').src = s.imageUrl;`, // 详情大图直出静态
-		`this.dataset.f=1`,             // png 失败首跳剪影标记
-		`this.onerror=null;this.src=\'`, // 兜底链闭合（HTML 内转义单引号）
-		`escapeHtml(s.silhouette)`,     // 剪影兜底
-		`id="card-wall"`,               // M8 卡片墙基线
+		`this.dataset.f=1`,                      // png 失败首跳剪影标记
+		`this.onerror=null;this.src=\'`,         // 兜底链闭合（HTML 内转义单引号）
+		`escapeHtml(s.silhouette)`,              // 剪影兜底
+		`id="card-wall"`,                        // M8 卡片墙基线
 	} {
 		if !m5Contains(body, anchor) {
 			t.Errorf("teacher.html 缺少静态直出锚点 %q", anchor)

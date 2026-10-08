@@ -83,10 +83,12 @@ func TestM5ViewportMetaAllPages(t *testing.T) {
 
 // TestM5MediaQueriesPresent 校验窄屏媒体查询与触屏口径的存在性：
 // a) style.css：@media (max-width: 1023px) 窄屏块 + 可点目标 min-height: 44px
-//    + 表单 font-size: 16px（防 iOS 聚焦缩放）；
+//   - 表单 font-size: 16px（防 iOS 聚焦缩放）；
+//
 // b) teacher.html：页内 @media 窄屏块 + 花名册卡片化机制——td 渲染模板带
-//    data-label 属性，且存在 attr(data-label) 取标签内容的 CSS 规则
-//    （teacher.html 内联或 style.css 任一出现即算）。
+//
+//	data-label 属性，且存在 attr(data-label) 取标签内容的 CSS 规则
+//	（teacher.html 内联或 style.css 任一出现即算）。
 func TestM5MediaQueriesPresent(t *testing.T) {
 	h := newHandler(t)
 
