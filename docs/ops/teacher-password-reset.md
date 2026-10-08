@@ -55,6 +55,8 @@ ssh root@112.124.59.165 "cd /www/wwwroot/electronicpet && sudo -u www sqlite3 da
 
 ## 注意
 
+- **远程执行含 `$` 的 SQL（如 bcrypt 哈希）会被远程 shell 当位置参数展开吃掉**（实测：`$2a$10$` 前缀丢失致哈希残废）。必须先把 SQL 写入文件 scp 到服务器，再 `sqlite3 data/pet.db < /tmp/xx.sql` 执行，勿用 `-e` 内联或双层引号直传。
+
 - `sqlite3` 若服务器未装，可临时 `apt install -y sqlite3` 或用本机生成完整 UPDATE SQL 后由服务端执行。
 - **严禁**把明文/临时密码写入任何仓库文件或 issue；群内知会后建议撤回消息。
 - pass_ver 递增即旧 token 全失效，无需重启服务。
