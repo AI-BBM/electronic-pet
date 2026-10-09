@@ -51,6 +51,15 @@
     .rarity-common { background: #8a97a6; }
     .rarity-rare { background: #2f80ed; }
     .rarity-epic { background: #f5a623; }
+    /* M12 皮肤商店（#55 F1：教师代购代切换） */
+    .skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 8px; }
+    .skin-card { border: 1px solid #dfe5ec; border-radius: 10px; padding: 10px 6px; text-align: center; background: #fff; }
+    .skin-card.active-skin { border-color: #4c7dff; }
+    .skin-card img { width: 96px; height: 96px; object-fit: contain; }
+    .skin-card .skin-name { font-size: 14px; margin: 4px 0 2px; }
+    .skin-card .skin-price { font-size: 12px; color: #8a97a6; }
+    .skin-card .skin-state { font-size: 12px; }
+    .skin-card button { margin-top: 6px; font-size: 13px; }
     /* M5 窄屏适配（<1024px）：表格降级为卡片式列表，触屏目标 ≥44px */
     @media (max-width: 1023px) {
       body { margin: 0 auto; padding: 12px; }
@@ -69,6 +78,7 @@
       .card-wall { grid-template-columns: 1fr; }
       .detail-pet-img { max-width: 100%; }
       .species-grid { grid-template-columns: repeat(2, 1fr); }
+      .skin-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -132,7 +142,7 @@
       <div id="roster-table" class="subview">
         <table>
           <thead>
-            <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>最近加分</th><th>操作</th></tr>
+            <tr><th>学号</th><th>姓名</th><th>宠物</th><th>等级</th><th>积分</th><th>积分余额</th><th>最近加分</th><th>操作</th></tr>
           </thead>
           <tbody id="roster"></tbody>
         </table>
@@ -151,6 +161,7 @@
       <p class="detail-field">种类：<span id="detail-species-name"></span></p>
       <p class="detail-field">等级：<span id="detail-level"></span></p>
       <p class="detail-field">积分：<span id="detail-points"></span></p>
+      <p class="detail-field">积分余额：<span id="detail-currency"></span></p>
       <div class="row">
         <button id="detail-adopt" class="do-adopt">发宠物</button>
         <button id="detail-points-btn">加分</button>
@@ -158,6 +169,12 @@
         <button id="detail-delete">删除</button>
       </div>
       <span id="detail-msg" class="err"></span>
+    </div>
+    <!-- M12 皮肤商店（#55 F1：教师代购代切换，使用中 = 主图换打卡照） -->
+    <div class="card" id="skin-shop" style="display:none">
+      <h2>皮肤商店 <span class="muted" style="font-size:13px;font-weight:normal">代学生购买与穿戴 · 每款 5 积分 · 购买永久解锁</span></h2>
+      <div class="skin-grid" id="skin-grid"></div>
+      <span id="skin-msg" class="err"></span>
     </div>
   </div>
 
@@ -410,7 +427,7 @@
             return '<div class="student-card" data-no="' + escapeHtml(s.studentNo) + '">' +
               img +
               '<div class="card-name">' + escapeHtml(s.name) + '</div>' +
-              '<div class="card-meta">' + escapeHtml(s.studentNo) + (s.adopted ? ' · Lv' + s.level + ' · ' + s.points + ' 分' : ' · 未领养') + '</div>' +
+              '<div class="card-meta">' + escapeHtml(s.studentNo) + (s.adopted ? ' · Lv' + s.level + ' · ' + s.points + ' 分 · 积分 ' + s.currency : ' · 未领养') + '</div>' +
               '<div class="card-ops">' + ops + '<button class="do-delete">删除</button></div>' +
               '</div>';
           }).join('');
@@ -427,6 +444,7 @@
               '<td data-label="宠物">' + pet + '</td>' +
               '<td data-label="等级">' + (s.adopted ? 'Lv' + s.level : '—') + '</td>' +
               '<td data-label="积分">' + (s.adopted ? s.points : '—') + '</td>' +
+              '<td data-label="积分余额">' + (s.adopted ? s.currency + ' 积分' : '—') + '</td>' +
               '<td data-label="最近加分" class="muted">' + escapeHtml(last) + '</td>' +
               '<td class="ops">' +
               (s.adopted ? '<button class="do-points">加分</button><button class="do-rename">改名</button>' : '<button class="do-adopt">发宠物</button>') +
@@ -451,7 +469,7 @@
           .then(function (r) {
             $('work-msg').textContent = '';
             $('detail-msg').textContent = '';
-            window.alert(r.levelUp ? '加分成功，触发进化！Lv' + r.level : '加分成功（+' + value + '）');
+            window.alert(r.levelUp ? '加分成功，触发进化！Lv' + r.level + '，积分同步 +' + value : '加分成功（+' + value + ' 分），积分同步入账 +' + value);
             loadRoster().then(function () { if (detailNo === no) { openDetail(no); } });
           })
           .catch(function (e) {
@@ -541,6 +559,7 @@
           $('detail-species-name').textContent = s.speciesName;
           $('detail-level').textContent = 'Lv' + s.level;
           $('detail-points').textContent = s.points + ' 分';
+          $('detail-currency').textContent = s.currency + ' 积分';
         } else {
           $('detail-pet-img').src = EGG_COMMON;
           $('detail-pet-img').onerror = null;
@@ -548,8 +567,11 @@
           $('detail-species-name').textContent = '—';
           $('detail-level').textContent = '—';
           $('detail-points').textContent = '—';
+          $('detail-currency').textContent = '—';
+          $('skin-shop').style.display = 'none';
         }
         $('detail-adopt').style.display = s.adopted ? 'none' : '';
+        if (s.adopted) { loadSkinShop(s, s.activeScene); } // 使用中皮肤（activeScene）由 renderSkinShop 换打卡照主图
         $('detail-msg').textContent = '';
         show('detail-view');
       }
@@ -558,6 +580,90 @@
       $('detail-points-btn').onclick = function () { doPoints(detailNo); };
       $('detail-rename').onclick = function () { doRename(detailNo); };
       $('detail-delete').onclick = function () { doDelete(detailNo); };
+
+      // ---------- 皮肤商店（M12 #55 F1：教师代购代切换） ----------
+      function loadSkinShop(s, activeSceneHint) {
+        if (!s || !s.adopted) { $('skin-shop').style.display = 'none'; return; } // 未领养不发目录请求
+        $('skin-shop').style.display = '';
+        $('skin-msg').textContent = '';
+        $('skin-grid').innerHTML = '<span class="muted">皮肤目录加载中…</span>';
+        api('GET', '/api/teacher/pets/' + s.id + '/skins', null, true).then(function (data) {
+          if (detailNo !== s.studentNo) { return; } // 陈旧守卫：详情已切到别的学生，丢弃过期目录
+          renderSkinShop(s, data, activeSceneHint);
+        }).catch(function (e) {
+          if (detailNo !== s.studentNo) { return; } // 过期错误同样不写当前详情页
+          $('skin-grid').innerHTML = '';
+          $('skin-msg').textContent = '皮肤目录加载失败：' + e.message;
+        });
+      }
+      function applyDetailImg(s, url) {
+        $('detail-pet-img').src = url;
+        $('detail-pet-img').onerror = function () {
+          this.onerror = function () { this.onerror = null; this.src = s.silhouette; };
+          this.src = s.imageUrl;
+        };
+      }
+      function renderSkinShop(s, data, activeSceneHint) {
+        $('detail-currency').textContent = data.currency + ' 积分';
+        // 目录的 activeScene 为准；null 时回退 openDetail 传入的 roster 提示值
+        var act = (data.activeScene === null || data.activeScene === undefined) ? (activeSceneHint || '') : data.activeScene;
+        var swapped = false;
+        if (act) {
+          for (var i = 0; i < data.skins.length; i++) {
+            if (data.skins[i].skinId === act) { applyDetailImg(s, data.skins[i].imageUrl); swapped = true; break; } // 使用中：主图换打卡照
+          }
+        }
+        if (!swapped) { applyDetailImg(s, s.imageUrl); } // 默认无皮肤态
+        $('skin-grid').innerHTML = data.skins.map(function (k) {
+          var state, btn;
+          if (k.active) {
+            state = '<div class="skin-state ok">使用中</div>';
+            btn = '<button class="do-skin-off" data-skin="' + escapeHtml(k.skinId) + '">取下</button>';
+          } else if (k.owned) {
+            state = '<div class="skin-state ok">已拥有</div>';
+            btn = '<button class="do-skin-wear" data-skin="' + escapeHtml(k.skinId) + '">穿戴</button>';
+          } else {
+            state = '<div class="skin-price">' + k.price + ' 积分</div>';
+            btn = k.purchasable ? '<button class="do-skin-buy" data-skin="' + escapeHtml(k.skinId) + '">购买</button>' : '';
+          }
+          return '<div class="skin-card' + (k.active ? ' active-skin' : '') + '">' +
+            '<img src="' + escapeHtml(k.imageUrl) + '" alt="' + escapeHtml(k.name) + '" onerror="if(!this.dataset.f){this.dataset.f=1;this.src=\'' + escapeHtml(s.imageUrl) + '\';}else{this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\';}">' +
+            '<div class="skin-name">' + escapeHtml(k.name) + '</div>' + state + btn + '</div>';
+        }).join('');
+      }
+      var skinBusy = false; // 购买/穿戴飞行中防连点（后端幂等兜底，此处避免误导性报错闪烁）
+      function doSkinBuy(no, skinId) {
+        if (skinBusy) { return; }
+        var s = rosterCache[no] || {};
+        skinBusy = true;
+        var requestId = 'buy-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+        api('POST', '/api/teacher/pets/' + s.id + '/skins/buy', { skinId: skinId, requestId: requestId }, true)
+          .then(function () { skinBusy = false; afterSkinChange(no); })
+          .catch(function (e) { skinBusy = false; $('skin-msg').textContent = e.message; });
+      }
+      function doSkinActivate(no, skinId) { // skinId 空串 = 取下切回默认
+        if (skinBusy) { return; }
+        var s = rosterCache[no] || {};
+        skinBusy = true;
+        api('POST', '/api/teacher/pets/' + s.id + '/skins/activate', { skinId: skinId }, true)
+          .then(function () { skinBusy = false; afterSkinChange(no); })
+          .catch(function (e) { skinBusy = false; $('skin-msg').textContent = e.message; });
+      }
+      function afterSkinChange(no) {
+        $('skin-msg').textContent = '';
+        $('work-msg').textContent = '';
+        var s = rosterCache[no];
+        if (detailNo === no && s) { loadSkinShop(s); } // 变更后不带 hint，以服务端 truth 为准
+        loadRoster(); // 花名册积分余额/activeScene 同步
+      }
+      $('skin-grid').addEventListener('click', function (ev) {
+        var btn = ev.target.closest('button');
+        if (!btn || !detailNo) return;
+        var skinId = btn.getAttribute('data-skin');
+        if (btn.classList.contains('do-skin-buy')) { doSkinBuy(detailNo, skinId); }
+        else if (btn.classList.contains('do-skin-wear')) { doSkinActivate(detailNo, skinId); }
+        else if (btn.classList.contains('do-skin-off')) { doSkinActivate(detailNo, ''); }
+      });
 
       // ---------- 发宠物选择器（#35 M8 U3） ----------
       $('adopt-picker').addEventListener('click', function (ev) {
