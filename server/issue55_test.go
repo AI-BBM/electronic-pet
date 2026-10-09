@@ -221,6 +221,34 @@ func TestIssue55_T4_ActiveSceneSwapsMainImage(t *testing.T) {
 	}
 }
 
+// ---------- T11 皮肤目录响应陈旧守卫（对抗审查 P1-1 回归） ----------
+
+// T11 快速切换学生时过期目录响应不得渲染：loadSkinShop 的 .then 回调必须带
+// detailNo 陈旧守卫（当前详情学生已变则丢弃响应），且守卫须以学生标识
+// （s.studentNo）比较——防只加占位变量不比较的假守卫。
+// 盲区说明：T1–T8 是源码字符串断言、T9 只打后端 API，均看不到异步时序，
+// 故 P1-1（旧目录覆盖新学生详情页并可错买扣分）只有专门契约能钉住。
+// 命令: go test ./server/ -run TestIssue55_T11_SkinCatalogStaleGuard -v
+func TestIssue55_T11_SkinCatalogStaleGuard(t *testing.T) {
+	body := m55Page(t, newHandler(t))
+
+	start := strings.Index(body, "function loadSkinShop")
+	if start < 0 {
+		t.Fatalf("/teacher.html 缺少 loadSkinShop 函数")
+	}
+	region := m55FnRegion(body, start)
+	w, ok := m55Around(region, ".then", 0, 600)
+	if !ok {
+		t.Fatalf("loadSkinShop 内缺少 .then 异步回调（目录拉取被改为同步？）")
+	}
+	if !m5Contains(w, "detailNo") {
+		t.Errorf("loadSkinShop 的 .then 回调缺少 detailNo 陈旧守卫：快速切换学生时，上一学生的过期目录响应可能覆盖当前详情页（皮肤网格/积分余额/打卡照主图），并可致错买扣分（对抗审查 P1-1 回归）")
+	}
+	if !m5Contains(region, "studentNo") {
+		t.Errorf("loadSkinShop 未携带学生标识（s.studentNo）：陈旧守卫须按当前详情学生比较，而非占位变量")
+	}
+}
+
 // ---------- T5 未领养学生不展示皮肤商店 ----------
 
 // T5 皮肤商店仅对已领养学生展示：皮肤商店代码区（首个 /skins 调用前后窗口）

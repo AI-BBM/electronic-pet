@@ -588,8 +588,10 @@
         $('skin-msg').textContent = '';
         $('skin-grid').innerHTML = '<span class="muted">皮肤目录加载中…</span>';
         api('GET', '/api/teacher/pets/' + s.id + '/skins', null, true).then(function (data) {
+          if (detailNo !== s.studentNo) { return; } // 陈旧守卫：详情已切到别的学生，丢弃过期目录
           renderSkinShop(s, data, activeSceneHint);
         }).catch(function (e) {
+          if (detailNo !== s.studentNo) { return; } // 过期错误同样不写当前详情页
           $('skin-grid').innerHTML = '';
           $('skin-msg').textContent = '皮肤目录加载失败：' + e.message;
         });
@@ -629,18 +631,23 @@
             '<div class="skin-name">' + escapeHtml(k.name) + '</div>' + state + btn + '</div>';
         }).join('');
       }
+      var skinBusy = false; // 购买/穿戴飞行中防连点（后端幂等兜底，此处避免误导性报错闪烁）
       function doSkinBuy(no, skinId) {
+        if (skinBusy) { return; }
         var s = rosterCache[no] || {};
+        skinBusy = true;
         var requestId = 'buy-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
         api('POST', '/api/teacher/pets/' + s.id + '/skins/buy', { skinId: skinId, requestId: requestId }, true)
-          .then(function () { afterSkinChange(no); })
-          .catch(function (e) { $('skin-msg').textContent = e.message; });
+          .then(function () { skinBusy = false; afterSkinChange(no); })
+          .catch(function (e) { skinBusy = false; $('skin-msg').textContent = e.message; });
       }
       function doSkinActivate(no, skinId) { // skinId 空串 = 取下切回默认
+        if (skinBusy) { return; }
         var s = rosterCache[no] || {};
+        skinBusy = true;
         api('POST', '/api/teacher/pets/' + s.id + '/skins/activate', { skinId: skinId }, true)
-          .then(function () { afterSkinChange(no); })
-          .catch(function (e) { $('skin-msg').textContent = e.message; });
+          .then(function () { skinBusy = false; afterSkinChange(no); })
+          .catch(function (e) { skinBusy = false; $('skin-msg').textContent = e.message; });
       }
       function afterSkinChange(no) {
         $('skin-msg').textContent = '';
