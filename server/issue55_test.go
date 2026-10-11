@@ -186,12 +186,13 @@ func TestIssue55_T3_SkinShopBlockAndAPICalls(t *testing.T) {
 
 // ---------- T4 使用中主图换打卡照 ----------
 
-// T4 activeScene 主图替换 + 皮肤图兜底：
+// T4 activeScene 主图替换 + 皮肤图缺图占位（#58 演进）：
 //
 //	a) openDetail 函数体读取 activeScene（非空时详情主图用该皮肤 imageUrl）；
 //	b) openDetail 仍有 imageUrl 主图赋值（既有行为不回退）；
-//	c) 皮肤渲染区（首个 /skins 调用附近）的皮肤卡片图带 onerror 兜底回原立绘
-//	   （皮肤图 → s.imageUrl → s.silhouette，参考页面既有 onerror 写法）。
+//	c) 皮肤渲染区（首个 /skins 调用附近）的皮肤图 404 走「素材生成中」占位——
+//	   不得再回退 s.imageUrl/s.silhouette（掩盖缺图正是黄总看到的「皮肤都重复」
+//	   根因，#58 定稿移除；canonical 立绘兜底不受影响，见 issue58_test T3）。
 //
 // 命令: go test ./server/ -run TestIssue55_T4_ActiveSceneSwapsMainImage -v
 func TestIssue55_T4_ActiveSceneSwapsMainImage(t *testing.T) {
@@ -208,16 +209,16 @@ func TestIssue55_T4_ActiveSceneSwapsMainImage(t *testing.T) {
 	if !m5Contains(region, "imageUrl") {
 		t.Errorf("openDetail 缺少 imageUrl 主图赋值（既有默认立绘行为不得回退）")
 	}
-	// 皮肤渲染区兜底链。
+	// 皮肤渲染区缺图占位契约（#58 演进：皮肤图 404 → 「素材生成中」占位）。
 	if w, ok := m55Around(body, "/skins", 400, 6000); ok {
 		if !m5Contains(w, "onerror") {
-			t.Errorf("皮肤卡片图缺少 onerror 兜底（皮肤图 404 时须回退原立绘）")
+			t.Errorf("皮肤渲染区缺少 onerror 缺图处理（皮肤图 404 须有兜底路径）")
 		}
-		if !m5Contains(w, "silhouette") {
-			t.Errorf("皮肤卡片图 onerror 链未兜底到 s.silhouette（应为 皮肤图 → s.imageUrl → s.silhouette）")
+		if !m5Contains(w, "素材生成中") {
+			t.Errorf("皮肤渲染区缺少「素材生成中」占位（#58：皮肤图 404 须占位，不得回退默认立绘/剪影掩盖缺图）")
 		}
 	} else {
-		t.Errorf("未找到皮肤目录调用 /skins，无法定位皮肤渲染区（主图换打卡照的兜底链无从谈起）")
+		t.Errorf("未找到皮肤目录调用 /skins，无法定位皮肤渲染区（缺图占位契约无从谈起）")
 	}
 }
 

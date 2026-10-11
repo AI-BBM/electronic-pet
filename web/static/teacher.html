@@ -56,6 +56,7 @@
     .skin-card { border: 1px solid #dfe5ec; border-radius: 10px; padding: 10px 6px; text-align: center; background: #fff; }
     .skin-card.active-skin { border-color: #4c7dff; }
     .skin-card img { width: 96px; height: 96px; object-fit: contain; }
+    .skin-pending { width: 96px; height: 96px; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #8a97a6; background: #f2f4f7; border-radius: 8px; }
     .skin-card .skin-name { font-size: 14px; margin: 4px 0 2px; }
     .skin-card .skin-price { font-size: 12px; color: #8a97a6; }
     .skin-card .skin-state { font-size: 12px; }
@@ -596,12 +597,25 @@
           $('skin-msg').textContent = '皮肤目录加载失败：' + e.message;
         });
       }
-      function applyDetailImg(s, url) {
-        $('detail-pet-img').src = url;
-        $('detail-pet-img').onerror = function () {
-          this.onerror = function () { this.onerror = null; this.src = s.silhouette; };
-          this.src = s.imageUrl;
-        };
+      // #58 缺图占位：皮肤打卡照 404 显示「素材生成中」，是终态——
+      // 不回退 s.imageUrl/s.silhouette（回退会掩盖缺图，正是「皮肤都重复」的根因）。
+      var SKIN_PENDING = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">' +
+        '<rect width="512" height="512" fill="#f2f4f7"/>' +
+        '<text x="256" y="256" text-anchor="middle" dominant-baseline="middle" ' +
+        'font-family="sans-serif" font-size="34" fill="#8a97a6">素材生成中</text></svg>');
+      function skinImgFail(img) { // 皮肤缩略图 404：整块替换为占位
+        var ph = document.createElement('div');
+        ph.className = 'skin-pending';
+        ph.textContent = '素材生成中';
+        img.replaceWith(ph);
+      }
+      function applyDetailImg(s, url, isSkin) { // isSkin：皮肤打卡照轨 404→占位；默认轨保留 立绘→剪影 链
+        var img = $('detail-pet-img');
+        img.onerror = isSkin
+          ? function () { this.onerror = null; this.src = SKIN_PENDING; }
+          : function () { this.onerror = function () { this.onerror = null; this.src = s.silhouette; }; this.src = s.imageUrl; };
+        img.src = url;
       }
       function renderSkinShop(s, data, activeSceneHint) {
         $('detail-currency').textContent = data.currency + ' 积分';
@@ -610,7 +624,7 @@
         var swapped = false;
         if (act) {
           for (var i = 0; i < data.skins.length; i++) {
-            if (data.skins[i].skinId === act) { applyDetailImg(s, data.skins[i].imageUrl); swapped = true; break; } // 使用中：主图换打卡照
+            if (data.skins[i].skinId === act) { applyDetailImg(s, data.skins[i].imageUrl, true); swapped = true; break; } // 使用中：主图换打卡照（皮肤轨 404→占位）
           }
         }
         if (!swapped) { applyDetailImg(s, s.imageUrl); } // 默认无皮肤态
@@ -627,7 +641,7 @@
             btn = k.purchasable ? '<button class="do-skin-buy" data-skin="' + escapeHtml(k.skinId) + '">购买</button>' : '';
           }
           return '<div class="skin-card' + (k.active ? ' active-skin' : '') + '">' +
-            '<img src="' + escapeHtml(k.imageUrl) + '" alt="' + escapeHtml(k.name) + '" onerror="if(!this.dataset.f){this.dataset.f=1;this.src=\'' + escapeHtml(s.imageUrl) + '\';}else{this.onerror=null;this.src=\'' + escapeHtml(s.silhouette) + '\';}">' +
+            '<img src="' + escapeHtml(k.imageUrl) + '" alt="' + escapeHtml(k.name) + '" onerror="skinImgFail(this)">' +
             '<div class="skin-name">' + escapeHtml(k.name) + '</div>' + state + btn + '</div>';
         }).join('');
       }
